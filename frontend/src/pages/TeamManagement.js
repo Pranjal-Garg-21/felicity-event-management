@@ -9,12 +9,6 @@ const TeamManagement = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('teams'); // 'teams' or 'invitations'
 
-  useEffect(() => {
-    if (user?.token) {
-      fetchData();
-    }
-  }, [user]);
-
   const fetchData = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -30,6 +24,13 @@ const TeamManagement = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (user?.token) {
+      fetchData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.token]);
 
   const handleAcceptInvite = async (inviteCode) => {
     try {
