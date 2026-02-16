@@ -1,0 +1,507 @@
+const nodemailer = require('nodemailer');
+
+// Create email transporter
+const createTransporter = () => {
+  // Check if Gmail credentials are provided
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    console.log('📧 Using Gmail SMTP with user:', process.env.EMAIL_USER);
+    
+    return nodemailer.createTransport({
+      service: 'gmail', // Using 'gmail' service simplifies configuration
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+  } else {
+    console.log('⚠️ No email credentials found, email sending disabled');
+    return null;
+  }
+};
+
+// Generate ticket HTML template
+const generateTicketHTML = (ticketData) => {
+  const { 
+    participantName, 
+    participantEmail, 
+    eventName, 
+    eventType,
+    eventDate, 
+    eventTime,
+    venue, 
+    organizerName,
+    registrationFee,
+    ticketId,
+    eligibility
+  } = ticketData;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body {
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+          background-color: #f5f5f5;
+        }
+        .ticket-container {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 15px;
+          padding: 30px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+          margin-bottom: 20px;
+        }
+        .ticket-header {
+          text-align: center;
+          color: white;
+          margin-bottom: 30px;
+        }
+        .ticket-header h1 {
+          margin: 0;
+          font-size: 28px;
+          font-weight: 700;
+        }
+        .ticket-header p {
+          margin: 5px 0;
+          font-size: 16px;
+          opacity: 0.9;
+        }
+        .ticket-body {
+          background: white;
+          border-radius: 10px;
+          padding: 25px;
+        }
+        .ticket-row {
+          display: flex;
+          justify-content: space-between;
+          padding: 12px 0;
+          border-bottom: 1px solid #eee;
+        }
+        .ticket-row:last-child {
+          border-bottom: none;
+        }
+        .ticket-label {
+          font-weight: 600;
+          color: #666;
+        }
+        .ticket-value {
+          color: #333;
+          font-weight: 500;
+          text-align: right;
+        }
+        .ticket-id {
+          background: #f0f0f0;
+          padding: 15px;
+          border-radius: 8px;
+          text-align: center;
+          margin-top: 20px;
+          font-family: 'Courier New', monospace;
+          font-size: 14px;
+          letter-spacing: 1px;
+          color: #667eea;
+          font-weight: 700;
+        }
+        .important-note {
+          background: #fff3cd;
+          border-left: 4px solid #ffc107;
+          padding: 15px;
+          margin-top: 20px;
+          border-radius: 5px;
+        }
+        .important-note h3 {
+          margin: 0 0 10px 0;
+          color: #856404;
+          font-size: 16px;
+        }
+        .important-note p {
+          margin: 0;
+          color: #856404;
+          font-size: 14px;
+        }
+        .footer {
+          text-align: center;
+          padding: 20px;
+          color: #666;
+          font-size: 12px;
+        }
+        .emoji {
+          font-size: 24px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="ticket-container">
+        <div class="ticket-header">
+          <div class="emoji">🎟️</div>
+          <h1>Event Registration Confirmed!</h1>
+          <p>Your ticket for ${eventName}</p>
+        </div>
+        
+        <div class="ticket-body">
+          <div class="ticket-row">
+            <span class="ticket-label">👤 Participant Name:</span>
+            <span class="ticket-value">${participantName}</span>
+          </div>
+          <div class="ticket-row">
+            <span class="ticket-label">📧 Email:</span>
+            <span class="ticket-value">${participantEmail}</span>
+          </div>
+          <div class="ticket-row">
+            <span class="ticket-label">🎭 Event:</span>
+            <span class="ticket-value">${eventName}</span>
+          </div>
+          <div class="ticket-row">
+            <span class="ticket-label">📅 Date:</span>
+            <span class="ticket-value">${eventDate}</span>
+          </div>
+          ${eventTime ? `
+          <div class="ticket-row">
+            <span class="ticket-label">🕒 Time:</span>
+            <span class="ticket-value">${eventTime}</span>
+          </div>
+          ` : ''}
+          <div class="ticket-row">
+            <span class="ticket-label">📍 Venue:</span>
+            <span class="ticket-value">${venue || 'TBA'}</span>
+          </div>
+          <div class="ticket-row">
+            <span class="ticket-label">🎪 Organizer:</span>
+            <span class="ticket-value">${organizerName}</span>
+          </div>
+          ${eventType ? `
+          <div class="ticket-row">
+            <span class="ticket-label">🎯 Type:</span>
+            <span class="ticket-value">${eventType}</span>
+          </div>
+          ` : ''}
+          ${eligibility ? `
+          <div class="ticket-row">
+            <span class="ticket-label">✅ Eligibility:</span>
+            <span class="ticket-value">${eligibility}</span>
+          </div>
+          ` : ''}
+          <div class="ticket-row">
+            <span class="ticket-label">💰 Registration Fee:</span>
+            <span class="ticket-value">₹${registrationFee || 0}</span>
+          </div>
+          
+          <div class="ticket-id">
+            TICKET ID: ${ticketId}
+          </div>
+        </div>
+      </div>
+      
+      <div class="important-note">
+        <h3>⚠️ Important Instructions</h3>
+        <p>• Please carry this ticket (printed or digital) to the event venue</p>
+        <p>• Arrive at least 15 minutes before the event starts</p>
+        <p>• Keep your Ticket ID handy for verification</p>
+        <p>• For any queries, contact the event organizer</p>
+      </div>
+      
+      <div class="footer">
+        <p>This is an automated email. Please do not reply to this email.</p>
+        <p>© ${new Date().getFullYear()} Campus Event Management System</p>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+// Send event ticket email
+const sendEventTicket = async (participantData, eventData, customTicketId = null) => {
+  try {
+    console.log('📨 Attempting to send email to:', participantData.email);
+    
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.log('⚠️ Email transporter not configured');
+      return {
+        success: false,
+        error: 'Email service not configured'
+      };
+    }
+
+    // Generate unique ticket ID or use provided one
+    const ticketId = customTicketId || `TICKET-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    
+    console.log('🎟️ Using Ticket ID:', ticketId);
+
+    // Format date and time
+    const eventDate = new Date(eventData.startDate).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const eventTime = eventData.startDate ? 
+      `${new Date(eventData.startDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - ${new Date(eventData.endDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}` 
+      : null;
+
+    const ticketData = {
+      participantName: `${participantData.firstName} ${participantData.lastName}`.trim(),
+      participantEmail: participantData.email,
+      eventName: eventData.name,
+      eventType: eventData.type,
+      eventDate: eventDate,
+      eventTime: eventTime,
+      venue: eventData.venue,
+      organizerName: eventData.organizerName,
+      registrationFee: eventData.registrationFee,
+      eligibility: eventData.eligibility,
+      ticketId: ticketId,
+      // Team event specific data
+      isTeamMember: participantData.isTeamMember || false,
+      teamName: participantData.teamName || null,
+      role: participantData.role || null
+    };
+
+    // Customize subject and content for team events
+    const subject = participantData.isTeamMember 
+      ? `🎟️ Team Event Ticket - ${eventData.name} - ${participantData.teamName}`
+      : `🎟️ Event Ticket - ${eventData.name}`;
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || `"Felicity Events" <${process.env.EMAIL_USER}>`,
+      to: participantData.email,
+      subject: subject,
+      html: generateTicketHTML(ticketData),
+      text: `
+        Event Registration Confirmed!
+        
+        ${participantData.isTeamMember ? `Team: ${participantData.teamName}\nRole: ${participantData.role}\n` : ''}
+        Ticket ID: ${ticketId}
+        Participant: ${ticketData.participantName}
+        Email: ${participantData.email}
+        Event: ${eventData.name}
+        Date: ${eventDate}
+        ${eventTime ? `Time: ${eventTime}` : ''}
+        Venue: ${eventData.venue || 'TBA'}
+        Organizer: ${eventData.organizerName}
+        Registration Fee: ₹${eventData.registrationFee || 0}
+        
+        Important: Please carry this ticket to the event venue.
+        
+        This is an automated email. Please do not reply.
+      `
+    };
+
+    console.log('📤 Sending email...');
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log('✅ Email sent successfully!');
+    console.log('📧 Message ID:', info.messageId);
+    console.log('📬 Response:', info.response);
+
+    return {
+      success: true,
+      ticketId: ticketId,
+      messageId: info.messageId
+    };
+
+  } catch (error) {
+    console.error('❌ Error sending ticket email:', error);
+    console.error('Error details:', error.message);
+    
+    // Don't throw error - registration should succeed even if email fails
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+      eventName: eventData.name,
+      eventType: eventData.type,
+      eventDate: eventDate,
+      eventTime: eventTime,
+      venue: eventData.venue,
+      organizerName: eventData.organizerName,
+      registrationFee: eventData.registrationFee,
+      eligibility: eventData.eligibility,
+      ticketId: ticketId
+    };
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || `"Felicity Events" <${process.env.EMAIL_USER}>`,
+      to: participantData.email,
+      subject: `🎟️ Event Ticket - ${eventData.name}`,
+      html: generateTicketHTML(ticketData),
+      text: `
+        Event Registration Confirmed!
+        
+        Ticket ID: ${ticketId}
+        Participant: ${ticketData.participantName}
+        Email: ${participantData.email}
+        Event: ${eventData.name}
+        Date: ${eventDate}
+        ${eventTime ? `Time: ${eventTime}` : ''}
+        Venue: ${eventData.venue || 'TBA'}
+        Organizer: ${eventData.organizerName}
+        Registration Fee: ₹${eventData.registrationFee || 0}
+        
+        Important: Please carry this ticket to the event venue.
+        
+        This is an automated email. Please do not reply.
+      `
+    };
+
+    console.log('📤 Sending email...');
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log('✅ Email sent successfully!');
+    console.log('📧 Message ID:', info.messageId);
+    console.log('� Response:', info.response);
+
+    return {
+      success: true,
+      ticketId: ticketId,
+      messageId: info.messageId
+    };
+
+  } catch (error) {
+    console.error('❌ Error sending ticket email:', error);
+    console.error('Error details:', error.message);
+    
+    // Don't throw error - registration should succeed even if email fails
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+// Send team event tickets to all team members
+const sendTeamEventTickets = async (teamData, eventData) => {
+  try {
+    console.log('📨 Attempting to send team event tickets...');
+    console.log('👥 Team:', teamData.teamName);
+    console.log('📧 POC Email:', teamData.pocEmail);
+    console.log('👤 Members:', teamData.members.length);
+    
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.log('⚠️ Email transporter not configured');
+      return {
+        success: false,
+        error: 'Email service not configured',
+        sentCount: 0
+      };
+    }
+
+    // Generate unique team ticket ID
+    const baseTicketId = `TEAM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    console.log('🎟️ Generated Team Ticket Base ID:', baseTicketId);
+
+    // Populate event with organizer info if needed
+    const populatedEvent = await require('../models/Event').findById(eventData._id)
+      .populate('organizer', 'organizerName');
+    
+    const eventDetails = {
+      name: populatedEvent.name,
+      type: populatedEvent.type,
+      startDate: populatedEvent.startDate,
+      endDate: populatedEvent.endDate,
+      venue: populatedEvent.venue,
+      organizerName: populatedEvent.organizer?.organizerName || eventData.organizerName,
+      registrationFee: teamData.totalFee,
+      eligibility: populatedEvent.eligibility
+    };
+
+    const successfulSends = [];
+    const failedSends = [];
+
+    // Send email to POC
+    try {
+      const pocTicketId = `${baseTicketId}-POC`;
+      const pocResult = await sendEventTicket(
+        {
+          firstName: teamData.pocName.split(' ')[0] || teamData.pocName,
+          lastName: teamData.pocName.split(' ').slice(1).join(' ') || '',
+          email: teamData.pocEmail,
+          isTeamMember: true,
+          teamName: teamData.teamName,
+          role: 'Point of Contact'
+        },
+        eventDetails,
+        pocTicketId
+      );
+      
+      if (pocResult.success) {
+        successfulSends.push({ email: teamData.pocEmail, ticketId: pocTicketId });
+        console.log('✅ Email sent to POC:', teamData.pocEmail);
+      } else {
+        failedSends.push({ email: teamData.pocEmail, error: pocResult.error });
+        console.log('❌ Failed to send email to POC:', teamData.pocEmail);
+      }
+    } catch (pocError) {
+      console.error('❌ Error sending POC email:', pocError);
+      failedSends.push({ email: teamData.pocEmail, error: pocError.message });
+    }
+
+    // Send emails to all team members
+    for (let i = 0; i < teamData.members.length; i++) {
+      const member = teamData.members[i];
+      try {
+        const memberTicketId = `${baseTicketId}-M${i + 1}`;
+        const memberResult = await sendEventTicket(
+          {
+            firstName: member.name.split(' ')[0] || member.name,
+            lastName: member.name.split(' ').slice(1).join(' ') || '',
+            email: member.email,
+            isTeamMember: true,
+            teamName: teamData.teamName,
+            role: `Team Member ${i + 1}`
+          },
+          eventDetails,
+          memberTicketId
+        );
+        
+        if (memberResult.success) {
+          successfulSends.push({ email: member.email, ticketId: memberTicketId });
+          console.log(`✅ Email sent to member ${i + 1}:`, member.email);
+        } else {
+          failedSends.push({ email: member.email, error: memberResult.error });
+          console.log(`❌ Failed to send email to member ${i + 1}:`, member.email);
+        }
+      } catch (memberError) {
+        console.error(`❌ Error sending email to member ${i + 1}:`, memberError);
+        failedSends.push({ email: member.email, error: memberError.message });
+      }
+    }
+
+    console.log(`📊 Team Email Summary: ${successfulSends.length} sent, ${failedSends.length} failed`);
+
+    return {
+      success: successfulSends.length > 0,
+      sentCount: successfulSends.length,
+      failedCount: failedSends.length,
+      baseTicketId: baseTicketId,
+      successfulSends,
+      failedSends,
+      totalEmails: 1 + teamData.members.length // POC + members
+    };
+
+  } catch (error) {
+    console.error('❌ Error sending team event tickets:', error);
+    console.error('Error details:', error.message);
+    
+    return {
+      success: false,
+      error: error.message,
+      sentCount: 0
+    };
+  }
+};
+
+module.exports = {
+  sendEventTicket,
+  sendTeamEventTickets
+};

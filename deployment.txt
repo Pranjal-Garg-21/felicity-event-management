@@ -1,0 +1,21 @@
+# Felicity Event Management System - Deployment URLs
+
+## Production URLs
+Frontend URL: [TO BE FILLED AFTER VERCEL DEPLOYMENT]
+Backend API URL: [TO BE FILLED AFTER RENDER DEPLOYMENT]
+
+## Health Check Endpoint
+API Health: [TO BE FILLED AFTER RENDER DEPLOYMENT]/health
+
+## Deployment Date
+Deployed on: [TO BE FILLED]
+
+## Default Admin Credentials
+Username: admin@felicity.com
+Password: admin123
+
+## Notes
+- Frontend hosted on Vercel
+- Backend hosted on Render
+- Database on MongoDB Atlas
+- Free tier deployments (backend may sleep after 15 min inactivity)

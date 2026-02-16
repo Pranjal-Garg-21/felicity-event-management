@@ -1,0 +1,15 @@
+Frontend URL: [TO BE FILLED AFTER VERCEL DEPLOYMENT]
+Backend URL: [TO BE FILLED AFTER RENDER DEPLOYMENT]
+Database: MongoDB Atlas (mongodb+srv://felicity_db:Garg2006@cluster0.5jojd.mongodb.net/)
+
+Deployment Instructions:
+1. Follow QUICK_DEPLOY.md for step-by-step guide
+2. Deploy backend to Render first
+3. Deploy frontend to Vercel (using backend URL)
+4. Update this file with actual URLs
+
+Admin Credentials:
+Email: admin@felicity.com
+Password: Admin@123
+
+Note: Backend on free tier may sleep after 15 minutes of inactivity.
