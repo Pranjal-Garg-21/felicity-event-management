@@ -180,6 +180,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
 
       return () => clearInterval(interval);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, eventId]);
 
   // Reaction emojis

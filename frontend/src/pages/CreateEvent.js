@@ -21,8 +21,6 @@ const CreateEvent = () => {
     tags: ''
   });
 
-  const [customFields, setCustomFields] = useState([]); //
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {

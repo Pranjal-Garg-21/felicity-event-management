@@ -9,7 +9,6 @@ const OrganizerDashboard = () => {
   const navigate = useNavigate();
   const [myEvents, setMyEvents] = useState([]);
   const [followers, setFollowers] = useState([]);
-  const [hoveredEventId, setHoveredEventId] = useState(null);
   const [activeTab, setActiveTab] = useState('published'); // Navigation tabs: published, create, details, analytics, profile
   const [selectedEventDetails, setSelectedEventDetails] = useState(null); // For viewing participants
   const [isEditing, setIsEditing] = useState(false); // Edit mode toggle
@@ -132,6 +131,7 @@ const OrganizerDashboard = () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Fetch event details with participants
@@ -392,8 +392,8 @@ const OrganizerDashboard = () => {
         if (editData.description !== event.description) updates.description = editData.description;
         if (editData.eligibility !== event.eligibility) updates.eligibility = editData.eligibility;
         if (editData.venue !== event.venue) updates.venue = editData.venue;
-        if (editData.registrationFee != event.registrationFee) updates.registrationFee = editData.registrationFee;
-        if (editData.registrationLimit != event.registrationLimit) updates.registrationLimit = editData.registrationLimit;
+        if (editData.registrationFee !== event.registrationFee) updates.registrationFee = editData.registrationFee;
+        if (editData.registrationLimit !== event.registrationLimit) updates.registrationLimit = editData.registrationLimit;
         if (editData.registrationDeadline) {
           const newDL = new Date(editData.registrationDeadline).toISOString();
           const oldDL = event.registrationDeadline ? new Date(event.registrationDeadline).toISOString() : '';
@@ -411,7 +411,7 @@ const OrganizerDashboard = () => {
           const oldDL = event.registrationDeadline ? new Date(event.registrationDeadline).toISOString() : '';
           if (newDL !== oldDL) updates.registrationDeadline = editData.registrationDeadline;
         }
-        if (editData.registrationLimit != event.registrationLimit) {
+        if (editData.registrationLimit !== event.registrationLimit) {
           updates.registrationLimit = parseInt(editData.registrationLimit);
         }
         if (editData.status && editData.status !== currentStatus) {
@@ -811,7 +811,7 @@ const OrganizerDashboard = () => {
   const handleSaveProfile = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.put('http://localhost:5000/api/users/profile', profileData, config);
+      await axios.put('http://localhost:5000/api/users/profile', profileData, config);
       alert('✅ Profile updated successfully!');
       setIsEditingProfile(false);
       
@@ -1865,7 +1865,6 @@ const OrganizerDashboard = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {selectedEventDetails.teamRegistrations.map((team, index) => {
                       // Calculate team attendance using attendance API data if available
-                      const teamMemberEmails = team.members.map(m => m.email);
                       const teamAttendance = team.members.map(member => {
                         let hasScanned = false;
                         let scannedAt = null;

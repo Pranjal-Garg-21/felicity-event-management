@@ -13,8 +13,6 @@ const ParticipantDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null); // Changed from hoveredEventId
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredEvents, setFilteredEvents] = useState([]);
-  const [filteredOrganizers, setFilteredOrganizers] = useState([]);
   const [showProfile, setShowProfile] = useState(false); // For profile modal
   const [userProfile, setUserProfile] = useState(null); // Full user profile data
   const [activeTab, setActiveTab] = useState('home'); // Navigation tabs: home, events, clubs, myevents
@@ -286,7 +284,6 @@ const ParticipantDashboard = () => {
     // For team events, show the NEW invite-based team creation modal
     if (event.type === 'Team') {
       const minSize = event.teamDetails?.minTeamSize || 2;
-      const maxSize = event.teamDetails?.maxTeamSize || 4;
       
       // Reset team creation form
       setTeamCreateData({
