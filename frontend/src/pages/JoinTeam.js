@@ -13,17 +13,6 @@ const JoinTeam = () => {
   const [message, setMessage] = useState('');
   const [teamInfo, setTeamInfo] = useState(null);
 
-  useEffect(() => {
-    if (!user) {
-      // Redirect to login if not authenticated
-      navigate('/login', { state: { from: `/join-team/${inviteCode}` } });
-      return;
-    }
-
-    // Auto-join team on mount
-    joinTeam();
-  }, [user, inviteCode]);
-
   const joinTeam = async () => {
     if (!inviteCode) {
       setStatus('error');
@@ -74,6 +63,18 @@ const JoinTeam = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!user) {
+      // Redirect to login if not authenticated
+      navigate('/login', { state: { from: `/join-team/${inviteCode}` } });
+      return;
+    }
+
+    // Auto-join team on mount
+    joinTeam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, inviteCode]);
 
   const containerStyle = {
     minHeight: '100vh',

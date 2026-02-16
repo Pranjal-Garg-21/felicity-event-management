@@ -26,15 +26,6 @@ const QRScanner = () => {
   const streamRef = useRef(null);
   const scanIntervalRef = useRef(null);
 
-  useEffect(() => {
-    if (!user || user.role !== 'Organizer') {
-      navigate('/login');
-      return;
-    }
-    fetchEventDetails();
-    fetchAttendanceDashboard();
-  }, [eventId, user]);
-
   const fetchEventDetails = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -78,6 +69,16 @@ const QRScanner = () => {
       console.error('Error details:', error.response?.data || error.message);
     }
   };
+
+  useEffect(() => {
+    if (!user || user.role !== 'Organizer') {
+      navigate('/login');
+      return;
+    }
+    fetchEventDetails();
+    fetchAttendanceDashboard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, user?.token]);
 
   // Camera Scanning Functions
   const startCameraScanning = async () => {

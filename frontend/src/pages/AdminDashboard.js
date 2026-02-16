@@ -25,14 +25,6 @@ const AdminDashboard = () => {
     navigate('/');
   };
 
-  useEffect(() => {
-    if (user && user.token) {
-      fetchOrganizers();
-      fetchResetRequests();
-      fetchAllEvents();
-    }
-  }, [user]);
-
   const fetchOrganizers = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
@@ -63,6 +55,15 @@ const AdminDashboard = () => {
       console.error("Error fetching reset requests", err);
     }
   };
+
+  useEffect(() => {
+    if (user && user.token) {
+      fetchOrganizers();
+      fetchResetRequests();
+      fetchAllEvents();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.token]);
 
   const handleResetAction = async (userId, action) => {
     try {
