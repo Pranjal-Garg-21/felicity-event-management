@@ -21,6 +21,8 @@ const CreateEvent = () => {
     tags: ''
   });
 
+  const [customFields] = useState([]); // Keep for customFormFields in API call
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
