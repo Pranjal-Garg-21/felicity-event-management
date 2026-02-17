@@ -7,9 +7,9 @@ import DiscussionForum from '../components/DiscussionForum';
 const ParticipantDashboard = () => {
   const { user, logout, login } = useContext(AuthContext);
   const navigate = useNavigate();
-  
+
   const [events, setEvents] = useState([]);
-  const [organizers, setOrganizers] = useState([]); 
+  const [organizers, setOrganizers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState(null); // Changed from hoveredEventId
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,7 +56,7 @@ const ParticipantDashboard = () => {
         console.error("Error fetching profile:", err);
       }
     };
-    
+
     if (user?.token) {
       fetchUserProfile();
     }
@@ -67,7 +67,7 @@ const ParticipantDashboard = () => {
     const fetchRegisteredEventsAndTickets = async () => {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        
+
         // Fetch registered events and tickets separately so one failure doesn't block the other
         try {
           const eventsRes = await axios.get('http://localhost:5000/api/events/my-registrations', config);
@@ -75,7 +75,7 @@ const ParticipantDashboard = () => {
         } catch (err) {
           console.error("Error fetching registered events:", err);
         }
-        
+
         try {
           const ticketsRes = await axios.get('http://localhost:5000/api/users/my-tickets', config);
           setMyTickets(ticketsRes.data);
@@ -86,7 +86,7 @@ const ParticipantDashboard = () => {
         console.error("Error fetching registered events/tickets:", err);
       }
     };
-    
+
     if (user?.token) {
       fetchRegisteredEventsAndTickets();
     }
@@ -103,7 +103,7 @@ const ParticipantDashboard = () => {
         console.error('Error fetching notifications:', err);
       }
     };
-    
+
     if (user?.token) {
       fetchNotifications();
       // Poll for new notifications every 30 seconds
@@ -113,143 +113,143 @@ const ParticipantDashboard = () => {
   }, [user]);
 
   // Fetch both Events and Organizers on mount
- useEffect(() => {
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const config = { 
-        headers: { Authorization: `Bearer ${user.token}` }, 
-        params: { search: searchTerm } // Send search term to backend
-      };
-      
-      const [eventRes, orgRes, profileRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/events/all', config),
-        axios.get('http://localhost:5000/api/users/organizers', config),
-        axios.get('http://localhost:5000/api/users/profile', config)
-      ]);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const config = {
+          headers: { Authorization: `Bearer ${user.token}` },
+          params: { search: searchTerm } // Send search term to backend
+        };
 
-      const userInterests = profileRes.data.interests || [];
-      const followedClubIds = (profileRes.data.followedClubs || []).map(club => 
-        typeof club === 'string' ? club : club._id
-      );
+        const [eventRes, orgRes, profileRes] = await Promise.all([
+          axios.get('http://localhost:5000/api/events/all', config),
+          axios.get('http://localhost:5000/api/users/organizers', config),
+          axios.get('http://localhost:5000/api/users/profile', config)
+        ]);
 
-      // Filter out Draft events - participants should only see Published, Ongoing, or Closed events
-      const visibleEvents = eventRes.data.filter(event => 
-        event.status !== 'Draft' && event.status !== undefined
-      );
-
-      // Advanced sorting algorithm based on multiple factors
-      const sortedEvents = visibleEvents.sort((a, b) => {
-        // Factor 1: Event category matches user interests (highest priority)
-        const aCategoryMatch = userInterests.some(interest => 
-          a.category?.toLowerCase().includes(interest.toLowerCase()) ||
-          interest.toLowerCase().includes(a.category?.toLowerCase())
-        );
-        const bCategoryMatch = userInterests.some(interest => 
-          b.category?.toLowerCase().includes(interest.toLowerCase()) ||
-          interest.toLowerCase().includes(b.category?.toLowerCase())
+        const userInterests = profileRes.data.interests || [];
+        const followedClubIds = (profileRes.data.followedClubs || []).map(club =>
+          typeof club === 'string' ? club : club._id
         );
 
-        // Factor 2: Event name matches user interests
-        const aNameMatch = userInterests.some(interest => 
-          a.name?.toLowerCase().includes(interest.toLowerCase())
-        );
-        const bNameMatch = userInterests.some(interest => 
-          b.name?.toLowerCase().includes(interest.toLowerCase())
+        // Filter out Draft events - participants should only see Published, Ongoing, or Closed events
+        const visibleEvents = eventRes.data.filter(event =>
+          event.status !== 'Draft' && event.status !== undefined
         );
 
-        // Factor 3: Event from followed club
-        const aFromFollowedClub = followedClubIds.includes(a.organizer?._id || a.organizer);
-        const bFromFollowedClub = followedClubIds.includes(b.organizer?._id || b.organizer);
+        // Advanced sorting algorithm based on multiple factors
+        const sortedEvents = visibleEvents.sort((a, b) => {
+          // Factor 1: Event category matches user interests (highest priority)
+          const aCategoryMatch = userInterests.some(interest =>
+            a.category?.toLowerCase().includes(interest.toLowerCase()) ||
+            interest.toLowerCase().includes(a.category?.toLowerCase())
+          );
+          const bCategoryMatch = userInterests.some(interest =>
+            b.category?.toLowerCase().includes(interest.toLowerCase()) ||
+            interest.toLowerCase().includes(b.category?.toLowerCase())
+          );
 
-        // Factor 4: Event tags match user interests
-        const aTagMatches = a.tags?.filter(tag => 
-          userInterests.some(interest => interest.toLowerCase() === tag.toLowerCase())
-        ).length || 0;
-        const bTagMatches = b.tags?.filter(tag => 
-          userInterests.some(interest => interest.toLowerCase() === tag.toLowerCase())
-        ).length || 0;
+          // Factor 2: Event name matches user interests
+          const aNameMatch = userInterests.some(interest =>
+            a.name?.toLowerCase().includes(interest.toLowerCase())
+          );
+          const bNameMatch = userInterests.some(interest =>
+            b.name?.toLowerCase().includes(interest.toLowerCase())
+          );
 
-        // Calculate total relevance score for each event
-        const aScore = (
-          (aCategoryMatch ? 100 : 0) +
-          (aNameMatch ? 50 : 0) +
-          (aFromFollowedClub ? 75 : 0) +
-          (aTagMatches * 25)
-        );
+          // Factor 3: Event from followed club
+          const aFromFollowedClub = followedClubIds.includes(a.organizer?._id || a.organizer);
+          const bFromFollowedClub = followedClubIds.includes(b.organizer?._id || b.organizer);
 
-        const bScore = (
-          (bCategoryMatch ? 100 : 0) +
-          (bNameMatch ? 50 : 0) +
-          (bFromFollowedClub ? 75 : 0) +
-          (bTagMatches * 25)
-        );
+          // Factor 4: Event tags match user interests
+          const aTagMatches = a.tags?.filter(tag =>
+            userInterests.some(interest => interest.toLowerCase() === tag.toLowerCase())
+          ).length || 0;
+          const bTagMatches = b.tags?.filter(tag =>
+            userInterests.some(interest => interest.toLowerCase() === tag.toLowerCase())
+          ).length || 0;
 
-        // Sort by relevance score (descending)
-        if (bScore !== aScore) {
-          return bScore - aScore;
-        }
+          // Calculate total relevance score for each event
+          const aScore = (
+            (aCategoryMatch ? 100 : 0) +
+            (aNameMatch ? 50 : 0) +
+            (aFromFollowedClub ? 75 : 0) +
+            (aTagMatches * 25)
+          );
 
-        // If same score, sort by date (upcoming events first)
-        return new Date(a.startDate) - new Date(b.startDate);
-      });
+          const bScore = (
+            (bCategoryMatch ? 100 : 0) +
+            (bNameMatch ? 50 : 0) +
+            (bFromFollowedClub ? 75 : 0) +
+            (bTagMatches * 25)
+          );
 
-      // Sort organizers based on user interests and followed status
-      const sortedOrganizers = orgRes.data.sort((a, b) => {
-        // Factor 1: Already following (show first)
-        const aFollowed = followedClubIds.includes(a._id);
-        const bFollowed = followedClubIds.includes(b._id);
-        
-        if (aFollowed && !bFollowed) return -1;
-        if (!aFollowed && bFollowed) return 1;
+          // Sort by relevance score (descending)
+          if (bScore !== aScore) {
+            return bScore - aScore;
+          }
 
-        // Factor 2: Category matches user interests
-        const aCategoryMatch = userInterests.some(interest => 
-          a.category?.toLowerCase().includes(interest.toLowerCase()) ||
-          interest.toLowerCase().includes(a.category?.toLowerCase())
-        );
-        const bCategoryMatch = userInterests.some(interest => 
-          b.category?.toLowerCase().includes(interest.toLowerCase()) ||
-          interest.toLowerCase().includes(b.category?.toLowerCase())
-        );
+          // If same score, sort by date (upcoming events first)
+          return new Date(a.startDate) - new Date(b.startDate);
+        });
 
-        if (aCategoryMatch && !bCategoryMatch) return -1;
-        if (!aCategoryMatch && bCategoryMatch) return 1;
+        // Sort organizers based on user interests and followed status
+        const sortedOrganizers = orgRes.data.sort((a, b) => {
+          // Factor 1: Already following (show first)
+          const aFollowed = followedClubIds.includes(a._id);
+          const bFollowed = followedClubIds.includes(b._id);
 
-        // Factor 3: Club name matches user interests
-        const aNameMatch = userInterests.some(interest => 
-          a.organizerName?.toLowerCase().includes(interest.toLowerCase())
-        );
-        const bNameMatch = userInterests.some(interest => 
-          b.organizerName?.toLowerCase().includes(interest.toLowerCase())
-        );
+          if (aFollowed && !bFollowed) return -1;
+          if (!aFollowed && bFollowed) return 1;
 
-        if (aNameMatch && !bNameMatch) return -1;
-        if (!aNameMatch && bNameMatch) return 1;
+          // Factor 2: Category matches user interests
+          const aCategoryMatch = userInterests.some(interest =>
+            a.category?.toLowerCase().includes(interest.toLowerCase()) ||
+            interest.toLowerCase().includes(a.category?.toLowerCase())
+          );
+          const bCategoryMatch = userInterests.some(interest =>
+            b.category?.toLowerCase().includes(interest.toLowerCase()) ||
+            interest.toLowerCase().includes(b.category?.toLowerCase())
+          );
 
-        // Factor 4: Sort by follower count (popularity)
-        return (b.followers?.length || 0) - (a.followers?.length || 0);
-      });
+          if (aCategoryMatch && !bCategoryMatch) return -1;
+          if (!aCategoryMatch && bCategoryMatch) return 1;
 
-      setEvents(sortedEvents);
-      setOrganizers(sortedOrganizers);
-      setLoading(false);
-    } catch (err) {
-      console.error("Fetch error:", err);
-      setLoading(false);
+          // Factor 3: Club name matches user interests
+          const aNameMatch = userInterests.some(interest =>
+            a.organizerName?.toLowerCase().includes(interest.toLowerCase())
+          );
+          const bNameMatch = userInterests.some(interest =>
+            b.organizerName?.toLowerCase().includes(interest.toLowerCase())
+          );
+
+          if (aNameMatch && !bNameMatch) return -1;
+          if (!aNameMatch && bNameMatch) return 1;
+
+          // Factor 4: Sort by follower count (popularity)
+          return (b.followers?.length || 0) - (a.followers?.length || 0);
+        });
+
+        setEvents(sortedEvents);
+        setOrganizers(sortedOrganizers);
+        setLoading(false);
+      } catch (err) {
+        console.error("Fetch error:", err);
+        setLoading(false);
+      }
+    };
+
+    // Debouncing logic: Only search DB if term is empty or 3+ characters
+    // This prevents hitting the database on every single keystroke
+    if (searchTerm.length === 0 || searchTerm.length >= 3) {
+      const delayDebounceFn = setTimeout(() => {
+        if (user?.token) fetchData();
+      }, 300); // 300ms delay
+
+      return () => clearTimeout(delayDebounceFn);
     }
-  };
-
-  // Debouncing logic: Only search DB if term is empty or 3+ characters
-  // This prevents hitting the database on every single keystroke
-  if (searchTerm.length === 0 || searchTerm.length >= 3) {
-    const delayDebounceFn = setTimeout(() => {
-      if (user?.token) fetchData();
-    }, 300); // 300ms delay
-
-    return () => clearTimeout(delayDebounceFn);
-  }
-}, [searchTerm, user]);
+  }, [searchTerm, user]);
 
   // Handle Follow/Unfollow Toggle
   const handleFollow = async (orgId) => {
@@ -257,21 +257,21 @@ const ParticipantDashboard = () => {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       // Sending follow/unfollow request to backend
       await axios.post(`http://localhost:5000/api/users/follow/${orgId}`, {}, config);
-      
+
       // Refresh user profile to sync followed clubs
       const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
       setUserProfile(profileRes.data);
-      
+
       // Update user context with new followedClubs
-      const clubIds = profileRes.data.followedClubs.map(club => 
+      const clubIds = profileRes.data.followedClubs.map(club =>
         typeof club === 'string' ? club : club._id
       );
       login({ ...user, followedClubs: clubIds });
-      
+
       // Refresh organizers list to get updated followers count
       const orgRes = await axios.get('http://localhost:5000/api/users/organizers', config);
       setOrganizers(orgRes.data);
-      
+
       console.log('Updated followed clubs:', clubIds);
     } catch (err) {
       console.error('Follow error:', err);
@@ -284,7 +284,7 @@ const ParticipantDashboard = () => {
     // For team events, show the NEW invite-based team creation modal
     if (event.type === 'Team') {
       const minSize = event.teamDetails?.minTeamSize || 2;
-      
+
       // Reset team creation form
       setTeamCreateData({
         teamName: '',
@@ -306,11 +306,11 @@ const ParticipantDashboard = () => {
     // Show confirmation dialog for individual/merchandise events
     const eventType = event.type === 'Merchandise' ? 'purchase this merchandise' : 'register for this event';
     const fee = event.registrationFee > 0 ? `\nRegistration Fee: ₹${event.registrationFee}` : '\nThis is a free event';
-    
+
     const confirmed = window.confirm(
       `Are you sure you want to ${eventType}?\n\nEvent: ${event.name}${fee}\n\nClick OK to confirm.`
     );
-    
+
     if (!confirmed) return;
 
     // Validate required custom fields
@@ -331,25 +331,25 @@ const ParticipantDashboard = () => {
       const { data } = await axios.post(`http://localhost:5000/api/events/register/${event._id}`, {
         formResponses: customFormData
       }, config);
-      
+
       // Show success message with ticket info
       let successMessage = `✅ ${data.message}\n\n📅 Event: ${data.event.eventName}\n🎭 Organizer: ${data.event.organizer}`;
-      
+
       if (data.ticket && data.ticket.ticketId) {
         successMessage += `\n\n🎟️ Ticket ID: ${data.ticket.ticketId}\n📧 Ticket sent to your email!`;
       }
-      
+
       alert(successMessage);
-      
+
       setSelectedEvent(null); // Close modal after registration
       setShowRegistrationForm(false);
       setCustomFormData({});
-      
+
       // Refresh events to update participant count - filter out drafts
       const eventRes = await axios.get('http://localhost:5000/api/events/all', config);
       const visibleEvents = eventRes.data.filter(ev => ev.status !== 'Draft' && ev.status !== undefined);
       setEvents(visibleEvents);
-      
+
       // Refresh registered events and tickets list separately so one failure doesn't block the other
       try {
         const registeredRes = await axios.get('http://localhost:5000/api/events/my-registrations', config);
@@ -357,14 +357,14 @@ const ParticipantDashboard = () => {
       } catch (regErr) {
         console.error("Error refreshing registered events:", regErr);
       }
-      
+
       try {
         const ticketsRes = await axios.get('http://localhost:5000/api/users/my-tickets', config);
         setMyTickets(ticketsRes.data);
       } catch (tickErr) {
         console.error("Error refreshing tickets:", tickErr);
       }
-      
+
     } catch (err) {
       alert(`❌ Registration Failed\n\n${err.response?.data?.message || "An error occurred. Please try again."}`);
     }
@@ -384,8 +384,8 @@ const ParticipantDashboard = () => {
       return;
     }
 
-    const teamNote = event.type === 'Team' 
-      ? '\n\n⚠️ As the POC, this will unregister ALL team members from this event.' 
+    const teamNote = event.type === 'Team'
+      ? '\n\n⚠️ As the POC, this will unregister ALL team members from this event.'
       : '';
 
     const confirmed = window.confirm(
@@ -436,6 +436,30 @@ const ParticipantDashboard = () => {
     return true;
   };
 
+  // Check if registration deadline has passed
+  const isRegistrationDeadlinePassed = (event) => {
+    if (!event || !event.registrationDeadline) return false;
+    return new Date() > new Date(event.registrationDeadline);
+  };
+
+  // Check if event has ended
+  const isEventEnded = (event) => {
+    if (!event || !event.endDate) return false;
+    return new Date() > new Date(event.endDate);
+  };
+
+  // Check if event can be registered for
+  const canRegisterForEvent = (event) => {
+    if (!event) return false;
+    // Already registered
+    if (registeredEvents.some(e => e._id === event._id)) return false;
+    // Registration deadline passed
+    if (isRegistrationDeadlinePassed(event)) return false;
+    // Event has ended
+    if (isEventEnded(event)) return false;
+    return true;
+  };
+
   // Handle Team Registration
   const handleTeamRegister = async () => {
     if (!selectedEvent) return;
@@ -443,7 +467,7 @@ const ParticipantDashboard = () => {
     // Validation
     const minSize = selectedEvent.teamDetails?.minTeamSize || 2;
     const maxSize = selectedEvent.teamDetails?.maxTeamSize || 4;
-    
+
     if (teamFormData.members.length < minSize || teamFormData.members.length > maxSize) {
       alert(`Team size must be between ${minSize} and ${maxSize} members.`);
       return;
@@ -476,7 +500,7 @@ const ParticipantDashboard = () => {
     }
 
     const totalFee = teamFormData.members.length * selectedEvent.registrationFee;
-    
+
     const confirmed = window.confirm(
       `Team Registration Confirmation\n\nTeam: ${teamFormData.teamName}\nMembers: ${teamFormData.members.length}\nTotal Fee: ₹${totalFee}\n\nProceed with registration?`
     );
@@ -490,9 +514,9 @@ const ParticipantDashboard = () => {
         totalFee,
         formResponses: customFormData
       }, config);
-      
+
       alert(`✅ Team Registration Successful!\n\nTeam: ${teamFormData.teamName}\nTotal Fee: ₹${totalFee}`);
-      
+
       // Reset form and close modals
       setTeamFormData({
         teamName: '',
@@ -503,12 +527,12 @@ const ParticipantDashboard = () => {
       setCustomFormData({});
       setShowTeamForm(false);
       setSelectedEvent(null);
-      
+
       // Refresh events - filter out drafts
       const eventRes = await axios.get('http://localhost:5000/api/events/all', config);
       const visibleEvents = eventRes.data.filter(ev => ev.status !== 'Draft' && ev.status !== undefined);
       setEvents(visibleEvents);
-      
+
       // Also refresh registered events and tickets
       try {
         const registeredRes = await axios.get('http://localhost:5000/api/events/my-registrations', config);
@@ -516,14 +540,14 @@ const ParticipantDashboard = () => {
       } catch (regErr) {
         console.error("Error refreshing registered events:", regErr);
       }
-      
+
       try {
         const ticketsRes = await axios.get('http://localhost:5000/api/users/my-tickets', config);
         setMyTickets(ticketsRes.data);
       } catch (tickErr) {
         console.error("Error refreshing tickets:", tickErr);
       }
-      
+
     } catch (err) {
       alert(`❌ Team Registration Failed\n\n${err.response?.data?.message || "An error occurred. Please try again."}`);
     }
@@ -661,7 +685,7 @@ const ParticipantDashboard = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       await axios.put(`http://localhost:5000/api/users/notifications/${notificationId}/read`, {}, config);
-      setNotifications(prev => 
+      setNotifications(prev =>
         prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
       );
     } catch (err) {
@@ -689,7 +713,7 @@ const ParticipantDashboard = () => {
       }
     }
   };
-  
+
   const handleLogout = () => { logout(); navigate('/'); };
 
   return (
@@ -700,28 +724,28 @@ const ParticipantDashboard = () => {
           <span style={navIconStyle}>🎓</span>
           <h2 style={navTitleStyle}>Participant Portal</h2>
         </div>
-        
+
         {/* Navigation Menu */}
         <div style={navMenuStyle}>
-          <button 
-            onClick={() => setActiveTab('home')} 
+          <button
+            onClick={() => setActiveTab('home')}
             style={activeTab === 'home' ? activeNavButtonStyle : navButtonStyle}
           >
             🏠 Home
           </button>
-          <button 
-            onClick={() => setActiveTab('events')} 
+          <button
+            onClick={() => setActiveTab('events')}
             style={activeTab === 'events' ? activeNavButtonStyle : navButtonStyle}
           >
             🎭 All Events
           </button>
-          <button 
-            onClick={() => setActiveTab('clubs')} 
+          <button
+            onClick={() => setActiveTab('clubs')}
             style={activeTab === 'clubs' ? activeNavButtonStyle : navButtonStyle}
           >
             🏢 Clubs
           </button>
-          <button 
+          <button
             onClick={() => {
               setActiveTab('myevents');
               // Refresh registered events when switching to My Events tab
@@ -732,7 +756,7 @@ const ParticipantDashboard = () => {
               axios.get('http://localhost:5000/api/users/my-tickets', config)
                 .then(res => setMyTickets(res.data))
                 .catch(err => console.error("Error refreshing tickets:", err));
-            }} 
+            }}
             style={activeTab === 'myevents' ? activeNavButtonStyle : navButtonStyle}
           >
             📋 My Events
@@ -740,14 +764,14 @@ const ParticipantDashboard = () => {
               <span style={badgeStyle}>{registeredEvents.length}</span>
             )}
           </button>
-          <button 
-            onClick={() => navigate('/teams')} 
+          <button
+            onClick={() => navigate('/teams')}
             style={navButtonStyle}
           >
             👥 My Teams
           </button>
-          <button 
-            onClick={() => setActiveTab('announcements')} 
+          <button
+            onClick={() => setActiveTab('announcements')}
             style={activeTab === 'announcements' ? activeNavButtonStyle : navButtonStyle}
           >
             📢 Announcements
@@ -759,8 +783,8 @@ const ParticipantDashboard = () => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           {/* Profile Button */}
-          <button 
-            onClick={() => setShowProfile(!showProfile)} 
+          <button
+            onClick={() => setShowProfile(!showProfile)}
             style={profileButtonStyle}
           >
             <span style={{ fontSize: '18px', marginRight: '8px' }}>👤</span>
@@ -861,9 +885,9 @@ const ParticipantDashboard = () => {
               <p style={subtitleStyle}>Explore events and follow your favorite clubs</p>
               <div style={searchContainerStyle}>
                 <span style={searchIconStyle}>🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search for clubs, events, or categories..." 
+                <input
+                  type="text"
+                  placeholder="Search for clubs, events, or categories..."
                   style={searchInputStyle}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -881,27 +905,27 @@ const ParticipantDashboard = () => {
                     <h3 style={cardTitleStyle}>{org.organizerName}</h3>
                     <p style={{ color: '#764ba2', fontWeight: 'bold', fontSize: '0.9rem' }}>{org.category}</p>
                     <p style={cardDescStyle}>{org.description || "No description provided."}</p>
-                    
+
                     {/* Follow/Unfollow Button Logic */}
-                    <button 
+                    <button
                       onClick={() => handleFollow(org._id)}
                       style={
-                        (org.followers?.some(id => id.toString() === user._id.toString()) || 
-                         user.followedClubs?.some(id => id.toString() === org._id.toString()))
-                        ? unfollowBtnStyle : followBtnStyle
+                        (org.followers?.some(id => id.toString() === user._id.toString()) ||
+                          user.followedClubs?.some(id => id.toString() === org._id.toString()))
+                          ? unfollowBtnStyle : followBtnStyle
                       }
                     >
-                      {(org.followers?.some(id => id.toString() === user._id.toString()) || 
+                      {(org.followers?.some(id => id.toString() === user._id.toString()) ||
                         user.followedClubs?.some(id => id.toString() === org._id.toString()))
-                       ? 'Unfollow' : 'Follow'}
+                        ? 'Unfollow' : 'Follow'}
                     </button>
                   </div>
                 )) : <p>No organizers found.</p>
               )}
             </div>
-            <button 
-              onClick={() => setActiveTab('clubs')} 
-              style={{...cardButtonStyle, marginTop: '20px', padding: '12px 30px'}}
+            <button
+              onClick={() => setActiveTab('clubs')}
+              style={{ ...cardButtonStyle, marginTop: '20px', padding: '12px 30px' }}
             >
               View All Clubs →
             </button>
@@ -914,15 +938,15 @@ const ParticipantDashboard = () => {
             <div style={welcomeBoxStyle}>
               <h1 style={headingStyle}>🎭 All Festival Events</h1>
               <p style={subtitleStyle}>
-                {userProfile?.interests?.length > 0 
-                  ? '✨ Sorted based on your interests' 
+                {userProfile?.interests?.length > 0
+                  ? '✨ Sorted based on your interests'
                   : 'Browse all available events'}
               </p>
               <div style={searchContainerStyle}>
                 <span style={searchIconStyle}>🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search for events..." 
+                <input
+                  type="text"
+                  placeholder="Search for events..."
                   style={searchInputStyle}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -935,40 +959,46 @@ const ParticipantDashboard = () => {
                 events.length > 0 ? events.map((event, index) => {
                   // Calculate if event is recommended
                   const userInterests = userProfile?.interests || [];
-                  const followedClubIds = (userProfile?.followedClubs || []).map(club => 
+                  const followedClubIds = (userProfile?.followedClubs || []).map(club =>
                     typeof club === 'string' ? club : club._id
                   );
 
-                  const categoryMatch = userInterests.some(interest => 
+                  const categoryMatch = userInterests.some(interest =>
                     event.category?.toLowerCase().includes(interest.toLowerCase())
                   );
-                  const nameMatch = userInterests.some(interest => 
+                  const nameMatch = userInterests.some(interest =>
                     event.name?.toLowerCase().includes(interest.toLowerCase())
                   );
                   const fromFollowedClub = followedClubIds.includes(event.organizer?._id || event.organizer);
-                  const tagMatch = event.tags?.some(tag => 
+                  const tagMatch = event.tags?.some(tag =>
                     userInterests.some(interest => interest.toLowerCase() === tag.toLowerCase())
                   );
 
                   const isRecommended = categoryMatch || nameMatch || fromFollowedClub || tagMatch;
                   const isTopPick = index < 3 && isRecommended;
                   const isRegistered = registeredEvents.some(e => e._id === event._id);
+                  const deadlinePassed = isRegistrationDeadlinePassed(event);
+                  const eventEnded = isEventEnded(event);
 
                   return (
-                    <div 
-                      key={event._id} 
+                    <div
+                      key={event._id}
                       style={{
                         ...infoCardStyle,
                         cursor: 'pointer',
                         border: isTopPick ? '3px solid #667eea' : (isRegistered ? '2px solid #4caf50' : 'none'),
-                        boxShadow: isTopPick ? '0 15px 40px rgba(102, 126, 234, 0.3)' : '0 10px 30px rgba(0,0,0,0.1)'
-                      }} 
+                        boxShadow: isTopPick ? '0 15px 40px rgba(102, 126, 234, 0.3)' : '0 10px 30px rgba(0,0,0,0.1)',
+                        opacity: (eventEnded || (deadlinePassed && !isRegistered)) ? 0.7 : 1
+                      }}
                       onClick={() => setSelectedEvent(event)}
                     >
-                      {isRegistered && <div style={{...topPickBadgeStyle, background: '#4caf50'}}>✓ Registered</div>}
-                      {isTopPick && !isRegistered && <div style={topPickBadgeStyle}>⭐ Top Pick</div>}
-                      {fromFollowedClub && !isTopPick && !isRegistered && <div style={recommendedBadgeStyle}>💜 From Followed Club</div>}
-                      {categoryMatch && !fromFollowedClub && !isTopPick && !isRegistered && <div style={recommendedBadgeStyle}>✨ Matches Your Interest</div>}
+                      {/* Priority order: Event Ended > Registered > Deadline Passed > Recommendations */}
+                      {eventEnded && <div style={eventEndedBadgeStyle}>🏁 Event Ended</div>}
+                      {!eventEnded && isRegistered && <div style={{ ...topPickBadgeStyle, background: '#4caf50' }}>✓ Registered</div>}
+                      {!eventEnded && !isRegistered && deadlinePassed && <div style={deadlinePassedBadgeStyle}>⏰ Registration Closed</div>}
+                      {!eventEnded && !isRegistered && !deadlinePassed && isTopPick && <div style={topPickBadgeStyle}>⭐ Top Pick</div>}
+                      {!eventEnded && !isRegistered && !deadlinePassed && fromFollowedClub && !isTopPick && <div style={recommendedBadgeStyle}>💜 From Followed Club</div>}
+                      {!eventEnded && !isRegistered && !deadlinePassed && categoryMatch && !fromFollowedClub && !isTopPick && <div style={recommendedBadgeStyle}>✨ Matches Your Interest</div>}
 
                       <div style={cardIconStyle}>{event.type === 'Merchandise' ? '👕' : '📅'}</div>
                       <h3 style={cardTitleStyle}>{event.name}</h3>
@@ -976,8 +1006,21 @@ const ParticipantDashboard = () => {
                         <p>📅 {new Date(event.startDate).toLocaleDateString()}</p>
                         <p>🕒 {new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                       </div>
-                      <button 
-                        style={cardButtonStyle} 
+                      {(deadlinePassed || eventEnded) && !isRegistered && (
+                        <div style={{
+                          background: '#fff3e0',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          marginTop: '10px',
+                          border: '1px solid #ffcc02'
+                        }}>
+                          <p style={{ margin: 0, fontSize: '0.8rem', color: '#e65100', fontWeight: '600' }}>
+                            {eventEnded ? '🏁 This event has ended' : '⏰ Registration deadline passed'}
+                          </p>
+                        </div>
+                      )}
+                      <button
+                        style={cardButtonStyle}
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedEvent(event);
@@ -999,15 +1042,15 @@ const ParticipantDashboard = () => {
             <div style={welcomeBoxStyle}>
               <h1 style={headingStyle}>🏢 All Clubs</h1>
               <p style={subtitleStyle}>
-                {userProfile?.followedClubs?.length > 0 
-                  ? 'Your followed clubs appear first' 
+                {userProfile?.followedClubs?.length > 0
+                  ? 'Your followed clubs appear first'
                   : 'Discover and follow clubs'}
               </p>
               <div style={searchContainerStyle}>
                 <span style={searchIconStyle}>🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search for clubs..." 
+                <input
+                  type="text"
+                  placeholder="Search for clubs..."
                   style={searchInputStyle}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -1023,19 +1066,19 @@ const ParticipantDashboard = () => {
                     <h3 style={cardTitleStyle}>{org.organizerName}</h3>
                     <p style={{ color: '#764ba2', fontWeight: 'bold', fontSize: '0.9rem' }}>{org.category}</p>
                     <p style={cardDescStyle}>{org.description || "No description provided."}</p>
-                    
+
                     {/* Follow/Unfollow Button Logic */}
-                    <button 
+                    <button
                       onClick={() => handleFollow(org._id)}
                       style={
-                        (org.followers?.some(id => id.toString() === user._id.toString()) || 
-                         user.followedClubs?.some(id => id.toString() === org._id.toString()))
-                        ? unfollowBtnStyle : followBtnStyle
+                        (org.followers?.some(id => id.toString() === user._id.toString()) ||
+                          user.followedClubs?.some(id => id.toString() === org._id.toString()))
+                          ? unfollowBtnStyle : followBtnStyle
                       }
                     >
-                      {(org.followers?.some(id => id.toString() === user._id.toString()) || 
+                      {(org.followers?.some(id => id.toString() === user._id.toString()) ||
                         user.followedClubs?.some(id => id.toString() === org._id.toString()))
-                       ? 'Unfollow' : 'Follow'}
+                        ? 'Unfollow' : 'Follow'}
                     </button>
                   </div>
                 )) : <p>No organizers found.</p>
@@ -1050,8 +1093,8 @@ const ParticipantDashboard = () => {
             <div style={welcomeBoxStyle}>
               <h1 style={headingStyle}>📋 My Registered Events & Tickets</h1>
               <p style={subtitleStyle}>
-                {registeredEvents.length > 0 
-                  ? `You're registered for ${registeredEvents.length} event${registeredEvents.length > 1 ? 's' : ''} | ${myTickets.length} ticket${myTickets.length !== 1 ? 's' : ''} issued` 
+                {registeredEvents.length > 0
+                  ? `You're registered for ${registeredEvents.length} event${registeredEvents.length > 1 ? 's' : ''} | ${myTickets.length} ticket${myTickets.length !== 1 ? 's' : ''} issued`
                   : 'You haven\'t registered for any events yet'}
               </p>
             </div>
@@ -1060,91 +1103,115 @@ const ParticipantDashboard = () => {
               {registeredEvents.length > 0 ? registeredEvents.map((event) => {
                 // Find ticket for this event
                 const ticket = myTickets.find(t => t.eventId && t.eventId._id === event._id);
-                
+                const eventEnded = isEventEnded(event);
+
                 return (
-                <div 
-                  key={event._id} 
-                  style={{
-                    ...infoCardStyle,
-                    cursor: 'pointer',
-                    border: '2px solid #4caf50',
-                    background: 'linear-gradient(135deg, #f5fff5 0%, #ffffff 100%)'
-                  }} 
-                  onClick={() => setSelectedEvent(event)}
-                >
-                  <div style={registeredBadgeStyle}>✓ Registered</div>
-                  {ticket && ticket.emailSent && (
-                    <div style={{...registeredBadgeStyle, background: '#2196F3', right: '70px', left: 'auto'}}>
-                      📧 Ticket Sent
+                  <div
+                    key={event._id}
+                    style={{
+                      ...infoCardStyle,
+                      cursor: eventEnded ? 'default' : 'pointer',
+                      border: '2px solid #4caf50',
+                      background: 'linear-gradient(135deg, #f5fff5 0%, #ffffff 100%)',
+                      opacity: eventEnded ? 0.85 : 1
+                    }}
+                    onClick={eventEnded ? undefined : () => setSelectedEvent(event)}
+                  >
+                    {eventEnded ? (
+                      <div style={eventEndedBadgeStyle}>🏁 Event Ended</div>
+                    ) : (
+                      <div style={registeredBadgeStyle}>✓ Registered</div>
+                    )}
+                    {ticket && ticket.emailSent && (
+                      <div style={{ ...registeredBadgeStyle, background: '#2196F3', right: '70px', left: 'auto' }}>
+                        📧 Ticket Sent
+                      </div>
+                    )}
+                    <div style={cardIconStyle}>{event.type === 'Merchandise' ? '👕' : '📅'}</div>
+                    <h3 style={cardTitleStyle}>{event.name}</h3>
+                    <p style={{ fontSize: '0.9rem', color: '#667eea', fontWeight: '600', marginBottom: '10px' }}>
+                      🎭 {event.organizer?.organizerName || 'Organizer'}
+                    </p>
+                    <div style={dateTimeStyle}>
+                      <p>📅 <strong>Date:</strong> {new Date(event.startDate).toLocaleDateString()}</p>
+                      <p>🕒 <strong>Time:</strong> {new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
-                  )}
-                  <div style={cardIconStyle}>{event.type === 'Merchandise' ? '👕' : '📅'}</div>
-                  <h3 style={cardTitleStyle}>{event.name}</h3>
-                  <p style={{ fontSize: '0.9rem', color: '#667eea', fontWeight: '600', marginBottom: '10px' }}>
-                    🎭 {event.organizer?.organizerName || 'Organizer'}
-                  </p>
-                  <div style={dateTimeStyle}>
-                    <p>📅 <strong>Date:</strong> {new Date(event.startDate).toLocaleDateString()}</p>
-                    <p>🕒 <strong>Time:</strong> {new Date(event.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    {eventEnded && (
+                      <div style={{
+                        background: '#f5f5f5',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        marginTop: '10px',
+                        border: '1px solid #9e9e9e'
+                      }}>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#666', fontWeight: '600' }}>
+                          🏁 This event has concluded
+                        </p>
+                      </div>
+                    )}
+                    {ticket && (
+                      <div style={{
+                        background: '#e3f2fd',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        marginTop: '10px',
+                        border: '1px solid #90caf9'
+                      }}>
+                        <p style={{ fontSize: '0.75rem', color: '#1976d2', margin: '0', fontWeight: '600', textAlign: 'center', fontFamily: 'monospace' }}>
+                          🎟️ {ticket.ticketId}
+                        </p>
+                      </div>
+                    )}
+                    {/* Only show action buttons if event has NOT ended */}
+                    {!eventEnded && (
+                      <>
+                        <button
+                          style={{ ...cardButtonStyle, background: 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)', marginTop: '10px' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEvent(event);
+                          }}
+                        >
+                          View Details
+                        </button>
+                        <button
+                          style={{ ...cardButtonStyle, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', marginTop: '8px', fontSize: '0.85rem' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEvent(event);
+                            setShowDiscussionForum(true);
+                          }}
+                        >
+                          💬 Discussion
+                        </button>
+                        {canUnregister(event) && (
+                          <button
+                            style={{
+                              ...cardButtonStyle,
+                              background: 'linear-gradient(135deg, #f5576c 0%, #ff6b6b 100%)',
+                              marginTop: '8px',
+                              fontSize: '0.85rem'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUnregister(event);
+                            }}
+                          >
+                            ✕ Unregister
+                          </button>
+                        )}
+                      </>
+                    )}
                   </div>
-                  {ticket && (
-                    <div style={{
-                      background: '#e3f2fd',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      marginTop: '10px',
-                      border: '1px solid #90caf9'
-                    }}>
-                      <p style={{ fontSize: '0.75rem', color: '#1976d2', margin: '0', fontWeight: '600', textAlign: 'center', fontFamily: 'monospace' }}>
-                        🎟️ {ticket.ticketId}
-                      </p>
-                    </div>
-                  )}
-                  <button 
-                    style={{...cardButtonStyle, background: 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)', marginTop: '10px'}} 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedEvent(event);
-                    }}
-                  >
-                    View Details
-                  </button>
-                  <button 
-                    style={{...cardButtonStyle, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', marginTop: '8px', fontSize: '0.85rem'}} 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedEvent(event);
-                      setShowDiscussionForum(true);
-                    }}
-                  >
-                    💬 Discussion
-                  </button>
-                  {canUnregister(event) && (
-                    <button 
-                      style={{
-                        ...cardButtonStyle, 
-                        background: 'linear-gradient(135deg, #f5576c 0%, #ff6b6b 100%)', 
-                        marginTop: '8px',
-                        fontSize: '0.85rem'
-                      }} 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleUnregister(event);
-                      }}
-                    >
-                      ✕ Unregister
-                    </button>
-                  )}
-                </div>
                 );
               }) : (
                 <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px' }}>
                   <p style={{ fontSize: '1.2rem', color: '#666', marginBottom: '20px' }}>
                     No events registered yet. Start exploring!
                   </p>
-                  <button 
-                    onClick={() => setActiveTab('events')} 
-                    style={{...cardButtonStyle, padding: '12px 30px'}}
+                  <button
+                    onClick={() => setActiveTab('events')}
+                    style={{ ...cardButtonStyle, padding: '12px 30px' }}
                   >
                     Browse Events →
                   </button>
@@ -1160,26 +1227,26 @@ const ParticipantDashboard = () => {
             <div style={welcomeBoxStyle}>
               <h1 style={headingStyle}>📢 Announcements</h1>
               <p style={subtitleStyle}>
-                {notifications.filter(n => !n.read).length > 0 
+                {notifications.filter(n => !n.read).length > 0
                   ? `You have ${notifications.filter(n => !n.read).length} unread announcement${notifications.filter(n => !n.read).length > 1 ? 's' : ''}`
                   : 'All caught up! No new announcements'}
               </p>
             </div>
 
-            <div style={{maxWidth: '900px', margin: '0 auto'}}>
+            <div style={{ maxWidth: '900px', margin: '0 auto' }}>
               {notifications.length === 0 ? (
-                <div style={{textAlign: 'center', padding: '60px 20px'}}>
-                  <div style={{fontSize: '4rem', marginBottom: '20px'}}>📭</div>
-                  <h2 style={{color: '#666', marginBottom: '10px'}}>No announcements yet</h2>
-                  <p style={{color: '#999', fontSize: '1rem'}}>
+                <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                  <div style={{ fontSize: '4rem', marginBottom: '20px' }}>📭</div>
+                  <h2 style={{ color: '#666', marginBottom: '10px' }}>No announcements yet</h2>
+                  <p style={{ color: '#999', fontSize: '1rem' }}>
                     You'll see announcements from organizers of your registered events here
                   </p>
                 </div>
               ) : (
-                <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   {notifications.map(notification => (
-                    <div 
-                      key={notification._id} 
+                    <div
+                      key={notification._id}
                       style={{
                         background: 'white',
                         borderRadius: '15px',
@@ -1191,8 +1258,8 @@ const ParticipantDashboard = () => {
                       }}
                       onClick={() => handleNotificationClick(notification)}
                     >
-                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '15px'}}>
-                        <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '15px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{
                             background: notification.read ? '#e0e7ff' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                             color: notification.read ? '#667eea' : 'white',
@@ -1209,7 +1276,7 @@ const ParticipantDashboard = () => {
                           </div>
                           <div>
                             <h3 style={{
-                              margin: '0 0 5px 0', 
+                              margin: '0 0 5px 0',
                               color: notification.read ? '#666' : '#333',
                               fontSize: '1.3rem',
                               fontWeight: '700'
@@ -1229,11 +1296,11 @@ const ParticipantDashboard = () => {
                                 month: 'short',
                                 day: 'numeric',
                                 year: 'numeric'
-                              })} at {new Date(notification.createdAt).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                              })} at {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
                           </div>
                         </div>
-                        <div style={{display: 'flex', gap: '10px'}}>
+                        <div style={{ display: 'flex', gap: '10px' }}>
                           {!notification.read && (
                             <span style={{
                               background: '#f5576c',
@@ -1293,10 +1360,10 @@ const ParticipantDashboard = () => {
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}>
-                        <p style={{margin: 0, fontSize: '0.85rem', color: '#999'}}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#999' }}>
                           Click to view full announcement in Discussion Forum
                         </p>
-                        <span style={{fontSize: '1.2rem'}}>→</span>
+                        <span style={{ fontSize: '1.2rem' }}>→</span>
                       </div>
                     </div>
                   ))}
@@ -1308,233 +1375,284 @@ const ParticipantDashboard = () => {
       </div>
 
       {/* Event Details Modal */}
-        {selectedEvent && (
-          <div style={modalOverlayStyle} onClick={() => { setSelectedEvent(null); setShowRegistrationForm(false); setCustomFormData({}); }}>
-            <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
-              <button style={closeButtonStyle} onClick={() => { setSelectedEvent(null); setShowRegistrationForm(false); setCustomFormData({}); }}>✕</button>
-              
-              <div style={modalHeaderStyle}>
-                <div style={modalIconStyle}>{selectedEvent.type === 'Merchandise' ? '👕' : '📅'}</div>
-                <h2 style={modalTitleStyle}>{selectedEvent.name}</h2>
+      {selectedEvent && (
+        <div style={modalOverlayStyle} onClick={() => { setSelectedEvent(null); setShowRegistrationForm(false); setCustomFormData({}); }}>
+          <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+            <button style={closeButtonStyle} onClick={() => { setSelectedEvent(null); setShowRegistrationForm(false); setCustomFormData({}); }}>✕</button>
+
+            <div style={modalHeaderStyle}>
+              <div style={modalIconStyle}>{selectedEvent.type === 'Merchandise' ? '👕' : '📅'}</div>
+              <h2 style={modalTitleStyle}>{selectedEvent.name}</h2>
+            </div>
+
+            <div style={modalBodyStyle}>
+              <div style={modalSectionStyle}>
+                <span style={modalLabelStyle}>📝 Description</span>
+                <p style={modalTextStyle}>{selectedEvent.description || 'No description available'}</p>
               </div>
 
-              <div style={modalBodyStyle}>
-                <div style={modalSectionStyle}>
-                  <span style={modalLabelStyle}>📝 Description</span>
-                  <p style={modalTextStyle}>{selectedEvent.description || 'No description available'}</p>
-                </div>
+              <div style={modalSectionStyle}>
+                <span style={modalLabelStyle}>🎭 Organizer</span>
+                <p style={modalTextStyle}>
+                  {typeof selectedEvent.organizer === 'object'
+                    ? (selectedEvent.organizer.organizerName || selectedEvent.organizer.name || 'Unknown Organizer')
+                    : selectedEvent.organizer
+                  }
+                </p>
+              </div>
 
+              <div style={modalInfoGridStyle}>
+                <div style={modalInfoItemStyle}>
+                  <span style={modalLabelStyle}>� Start Date</span>
+                  <p style={modalTextStyle}>{new Date(selectedEvent.startDate).toLocaleDateString()}</p>
+                </div>
+                <div style={modalInfoItemStyle}>
+                  <span style={modalLabelStyle}>⏰ Time</span>
+                  <p style={modalTextStyle}>{new Date(selectedEvent.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+                <div style={modalInfoItemStyle}>
+                  <span style={modalLabelStyle}>📍 End Date</span>
+                  <p style={modalTextStyle}>{new Date(selectedEvent.endDate).toLocaleDateString()}</p>
+                </div>
+                <div style={modalInfoItemStyle}>
+                  <span style={modalLabelStyle}>🎫 Type</span>
+                  <p style={modalTextStyle}>{selectedEvent.type}</p>
+                </div>
+              </div>
+
+              {selectedEvent.venue && (
                 <div style={modalSectionStyle}>
-                  <span style={modalLabelStyle}>🎭 Organizer</span>
-                  <p style={modalTextStyle}>
-                    {typeof selectedEvent.organizer === 'object' 
-                      ? (selectedEvent.organizer.organizerName || selectedEvent.organizer.name || 'Unknown Organizer')
-                      : selectedEvent.organizer
-                    }
+                  <span style={modalLabelStyle}>📍 Venue</span>
+                  <p style={modalTextStyle}>{selectedEvent.venue}</p>
+                </div>
+              )}
+
+              {selectedEvent.eligibility && (
+                <div style={modalSectionStyle}>
+                  <span style={modalLabelStyle}>✅ Eligibility</span>
+                  <p style={modalTextStyle}>{selectedEvent.eligibility}</p>
+                </div>
+              )}
+
+              <div style={modalSectionStyle}>
+                <span style={modalLabelStyle}>💰 Registration Fee</span>
+                <p style={modalTextStyle}>₹{selectedEvent.registrationFee || 0}</p>
+              </div>
+
+              {selectedEvent.type === 'Merchandise' && selectedEvent.merchandiseDetails && (
+                <div style={modalSectionStyle}>
+                  <span style={modalLabelStyle}>📦 Stock Available</span>
+                  <p style={modalTextStyle}>{selectedEvent.merchandiseDetails.stockQuantity - (selectedEvent.soldCount || 0)} items</p>
+                </div>
+              )}
+
+              <div style={modalSectionStyle}>
+                <span style={modalLabelStyle}>👥 Spots Available</span>
+                <p style={modalTextStyle}>{selectedEvent.registrationLimit - (selectedEvent.participants?.length || 0)} / {selectedEvent.registrationLimit}</p>
+              </div>
+
+              {/* Registration Deadline and Event Status */}
+              {selectedEvent.registrationDeadline && (
+                <div style={modalSectionStyle}>
+                  <span style={modalLabelStyle}>⏰ Registration Deadline</span>
+                  <p style={{ ...modalTextStyle, fontWeight: '600', color: isRegistrationDeadlinePassed(selectedEvent) ? '#f5576c' : '#4caf50' }}>
+                    {new Date(selectedEvent.registrationDeadline).toLocaleDateString()} at {new Date(selectedEvent.registrationDeadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {isRegistrationDeadlinePassed(selectedEvent) && ' ⚠️ (Deadline Passed)'}
+                    {!isRegistrationDeadlinePassed(selectedEvent) && ' ✓ (Still Open)'}
                   </p>
                 </div>
+              )}
 
-                <div style={modalInfoGridStyle}>
-                  <div style={modalInfoItemStyle}>
-                    <span style={modalLabelStyle}>� Start Date</span>
-                    <p style={modalTextStyle}>{new Date(selectedEvent.startDate).toLocaleDateString()}</p>
-                  </div>
-                  <div style={modalInfoItemStyle}>
-                    <span style={modalLabelStyle}>⏰ Time</span>
-                    <p style={modalTextStyle}>{new Date(selectedEvent.startDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                  </div>
-                  <div style={modalInfoItemStyle}>
-                    <span style={modalLabelStyle}>📍 End Date</span>
-                    <p style={modalTextStyle}>{new Date(selectedEvent.endDate).toLocaleDateString()}</p>
-                  </div>
-                  <div style={modalInfoItemStyle}>
-                    <span style={modalLabelStyle}>🎫 Type</span>
-                    <p style={modalTextStyle}>{selectedEvent.type}</p>
-                  </div>
-                </div>
-
-                {selectedEvent.venue && (
-                  <div style={modalSectionStyle}>
-                    <span style={modalLabelStyle}>📍 Venue</span>
-                    <p style={modalTextStyle}>{selectedEvent.venue}</p>
-                  </div>
-                )}
-
-                {selectedEvent.eligibility && (
-                  <div style={modalSectionStyle}>
-                    <span style={modalLabelStyle}>✅ Eligibility</span>
-                    <p style={modalTextStyle}>{selectedEvent.eligibility}</p>
-                  </div>
-                )}
-
-                <div style={modalSectionStyle}>
-                  <span style={modalLabelStyle}>💰 Registration Fee</span>
-                  <p style={modalTextStyle}>₹{selectedEvent.registrationFee || 0}</p>
-                </div>
-
-                {selectedEvent.type === 'Merchandise' && selectedEvent.merchandiseDetails && (
-                  <div style={modalSectionStyle}>
-                    <span style={modalLabelStyle}>📦 Stock Available</span>
-                    <p style={modalTextStyle}>{selectedEvent.merchandiseDetails.stockQuantity - (selectedEvent.soldCount || 0)} items</p>
-                  </div>
-                )}
-
-                <div style={modalSectionStyle}>
-                  <span style={modalLabelStyle}>👥 Spots Available</span>
-                  <p style={modalTextStyle}>{selectedEvent.registrationLimit - (selectedEvent.participants?.length || 0)} / {selectedEvent.registrationLimit}</p>
-                </div>
-
-                {/* Custom Registration Form Fields */}
-                {showRegistrationForm && selectedEvent.customFields && selectedEvent.customFields.length > 0 && !registeredEvents.some(e => e._id === selectedEvent._id) && (
-                  <div style={{
-                    background: '#f0f4ff',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    marginTop: '15px',
-                    border: '2px solid #90caf9'
+              {/* Event Status Warning */}
+              {(isEventEnded(selectedEvent) || isRegistrationDeadlinePassed(selectedEvent)) && !registeredEvents.some(e => e._id === selectedEvent._id) && (
+                <div style={{
+                  background: isEventEnded(selectedEvent) ? '#f5f5f5' : '#ffebee',
+                  padding: '15px 20px',
+                  borderRadius: '12px',
+                  marginTop: '15px',
+                  border: `2px solid ${isEventEnded(selectedEvent) ? '#9e9e9e' : '#f5576c'}`
+                }}>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '1rem',
+                    color: isEventEnded(selectedEvent) ? '#666' : '#c62828',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
                   }}>
-                    <h4 style={{ margin: '0 0 15px 0', color: '#333', fontSize: '1.05rem' }}>
-                      📋 Registration Form
-                    </h4>
-                    <p style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: '#666' }}>
-                      Please fill in the following fields to complete your registration.
-                    </p>
-                    {[...(selectedEvent.customFields || [])].sort((a, b) => (a.order || 0) - (b.order || 0)).map((field, idx) => (
-                      <div key={idx} style={{ marginBottom: '15px' }}>
-                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#333', marginBottom: '5px' }}>
-                          {field.fieldName} {field.isRequired && <span style={{ color: '#f44336' }}>*</span>}
+                    {isEventEnded(selectedEvent) ? (
+                      <><span style={{ fontSize: '1.5rem' }}>🏁</span> This event has ended. Registration is no longer available.</>
+                    ) : (
+                      <><span style={{ fontSize: '1.5rem' }}>⏰</span> Registration deadline has passed. You cannot register for this event.</>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Custom Registration Form Fields */}
+              {showRegistrationForm && selectedEvent.customFields && selectedEvent.customFields.length > 0 && !registeredEvents.some(e => e._id === selectedEvent._id) && (
+                <div style={{
+                  background: '#f0f4ff',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  marginTop: '15px',
+                  border: '2px solid #90caf9'
+                }}>
+                  <h4 style={{ margin: '0 0 15px 0', color: '#333', fontSize: '1.05rem' }}>
+                    📋 Registration Form
+                  </h4>
+                  <p style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: '#666' }}>
+                    Please fill in the following fields to complete your registration.
+                  </p>
+                  {[...(selectedEvent.customFields || [])].sort((a, b) => (a.order || 0) - (b.order || 0)).map((field, idx) => (
+                    <div key={idx} style={{ marginBottom: '15px' }}>
+                      <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#333', marginBottom: '5px' }}>
+                        {field.fieldName} {field.isRequired && <span style={{ color: '#f44336' }}>*</span>}
+                      </label>
+
+                      {field.fieldType === 'Text' && (
+                        <input
+                          type="text"
+                          placeholder={field.placeholder || ''}
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                          required={field.isRequired}
+                          style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                        />
+                      )}
+
+                      {field.fieldType === 'Textarea' && (
+                        <textarea
+                          placeholder={field.placeholder || ''}
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                          required={field.isRequired}
+                          style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', minHeight: '80px', boxSizing: 'border-box', resize: 'vertical' }}
+                        />
+                      )}
+
+                      {field.fieldType === 'Number' && (
+                        <input
+                          type="number"
+                          placeholder={field.placeholder || ''}
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                          required={field.isRequired}
+                          style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                        />
+                      )}
+
+                      {field.fieldType === 'Date' && (
+                        <input
+                          type="date"
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                          required={field.isRequired}
+                          style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                        />
+                      )}
+
+                      {field.fieldType === 'Email' && (
+                        <input
+                          type="email"
+                          placeholder={field.placeholder || 'email@example.com'}
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                          required={field.isRequired}
+                          style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                        />
+                      )}
+
+                      {field.fieldType === 'Phone' && (
+                        <input
+                          type="tel"
+                          placeholder={field.placeholder || '+91 9876543210'}
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                          required={field.isRequired}
+                          style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                        />
+                      )}
+
+                      {field.fieldType === 'Dropdown' && (
+                        <select
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                          required={field.isRequired}
+                          style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box', background: 'white' }}
+                        >
+                          <option value="">Select...</option>
+                          {(field.options || []).map((opt, oi) => (
+                            <option key={oi} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      {field.fieldType === 'Checkbox' && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!customFormData[field.fieldName]}
+                            onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.checked })}
+                            style={{ width: '20px', height: '20px' }}
+                          />
+                          <span style={{ fontSize: '0.9rem', color: '#555' }}>{field.placeholder || field.fieldName}</span>
                         </label>
+                      )}
 
-                        {field.fieldType === 'Text' && (
+                      {field.fieldType === 'FileUpload' && (
+                        <div>
                           <input
-                            type="text"
-                            placeholder={field.placeholder || ''}
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                            required={field.isRequired}
-                            style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
+                            type="file"
+                            onChange={(e) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                setCustomFormData({ ...customFormData, [field.fieldName]: file.name });
+                              }
+                            }}
+                            style={{ width: '100%', padding: '10px', border: '2px dashed #ddd', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
                           />
-                        )}
+                          <p style={{ margin: '5px 0 0 0', fontSize: '0.8rem', color: '#888' }}>
+                            📎 Upload a file (PDF, Image, Document)
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                        {field.fieldType === 'Textarea' && (
-                          <textarea
-                            placeholder={field.placeholder || ''}
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                            required={field.isRequired}
-                            style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', minHeight: '80px', boxSizing: 'border-box', resize: 'vertical' }}
-                          />
-                        )}
+              {/* Show custom fields indicator if event has custom fields but form not yet shown */}
+              {!showRegistrationForm && selectedEvent.customFields && selectedEvent.customFields.length > 0 && !registeredEvents.some(e => e._id === selectedEvent._id) && (
+                <div style={{
+                  background: '#fff3e0',
+                  padding: '12px 15px',
+                  borderRadius: '8px',
+                  marginTop: '10px',
+                  border: '1px solid #ffcc02'
+                }}>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: '#e65100' }}>
+                    📋 This event has a custom registration form with {selectedEvent.customFields.length} field{selectedEvent.customFields.length > 1 ? 's' : ''} to fill.
+                  </p>
+                </div>
+              )}
+            </div>
 
-                        {field.fieldType === 'Number' && (
-                          <input
-                            type="number"
-                            placeholder={field.placeholder || ''}
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                            required={field.isRequired}
-                            style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
-                          />
-                        )}
-
-                        {field.fieldType === 'Date' && (
-                          <input
-                            type="date"
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                            required={field.isRequired}
-                            style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
-                          />
-                        )}
-
-                        {field.fieldType === 'Email' && (
-                          <input
-                            type="email"
-                            placeholder={field.placeholder || 'email@example.com'}
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                            required={field.isRequired}
-                            style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
-                          />
-                        )}
-
-                        {field.fieldType === 'Phone' && (
-                          <input
-                            type="tel"
-                            placeholder={field.placeholder || '+91 9876543210'}
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                            required={field.isRequired}
-                            style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box' }}
-                          />
-                        )}
-
-                        {field.fieldType === 'Dropdown' && (
-                          <select
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                            required={field.isRequired}
-                            style={{ width: '100%', padding: '10px 14px', border: '2px solid #ddd', borderRadius: '8px', fontSize: '0.95rem', boxSizing: 'border-box', background: 'white' }}
-                          >
-                            <option value="">Select...</option>
-                            {(field.options || []).map((opt, oi) => (
-                              <option key={oi} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        )}
-
-                        {field.fieldType === 'Checkbox' && (
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0' }}>
-                            <input
-                              type="checkbox"
-                              checked={!!customFormData[field.fieldName]}
-                              onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.checked})}
-                              style={{ width: '20px', height: '20px' }}
-                            />
-                            <span style={{ fontSize: '0.9rem', color: '#555' }}>{field.placeholder || field.fieldName}</span>
-                          </label>
-                        )}
-
-                        {field.fieldType === 'FileUpload' && (
-                          <div>
-                            <input
-                              type="file"
-                              onChange={(e) => {
-                                const file = e.target.files[0];
-                                if (file) {
-                                  setCustomFormData({...customFormData, [field.fieldName]: file.name});
-                                }
-                              }}
-                              style={{ width: '100%', padding: '10px', border: '2px dashed #ddd', borderRadius: '8px', fontSize: '0.9rem', boxSizing: 'border-box' }}
-                            />
-                            <p style={{ margin: '5px 0 0 0', fontSize: '0.8rem', color: '#888' }}>
-                              📎 Upload a file (PDF, Image, Document)
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Show custom fields indicator if event has custom fields but form not yet shown */}
-                {!showRegistrationForm && selectedEvent.customFields && selectedEvent.customFields.length > 0 && !registeredEvents.some(e => e._id === selectedEvent._id) && (
+            <div style={modalFooterStyle}>
+              {registeredEvents.some(e => e._id === selectedEvent._id) ? (
+                // If event has ended, show only static message - no action buttons
+                isEventEnded(selectedEvent) ? (
                   <div style={{
-                    background: '#fff3e0',
-                    padding: '12px 15px',
-                    borderRadius: '8px',
-                    marginTop: '10px',
-                    border: '1px solid #ffcc02'
+                    ...modalRegisterButtonStyle,
+                    background: '#9e9e9e',
+                    cursor: 'default',
+                    opacity: 0.8
                   }}>
-                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#e65100' }}>
-                      📋 This event has a custom registration form with {selectedEvent.customFields.length} field{selectedEvent.customFields.length > 1 ? 's' : ''} to fill.
-                    </p>
+                    🏁 Event Has Ended - View Only
                   </div>
-                )}
-              </div>
-
-              <div style={modalFooterStyle}>
-                {registeredEvents.some(e => e._id === selectedEvent._id) ? (
+                ) : (
+                  // If event is still active, show normal action buttons
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', maxWidth: '500px' }}>
                     <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
                       <div style={{
@@ -1572,444 +1690,457 @@ const ParticipantDashboard = () => {
                       💬 {showDiscussionForum ? 'Hide' : 'View'} Discussion Forum
                     </button>
                   </div>
+                )
+              ) : (
+                // Check if registration is available
+                isEventEnded(selectedEvent) || isRegistrationDeadlinePassed(selectedEvent) ? (
+                  <div style={{
+                    ...modalRegisterButtonStyle,
+                    background: '#9e9e9e',
+                    cursor: 'not-allowed',
+                    opacity: 0.6
+                  }}>
+                    {isEventEnded(selectedEvent) ? '🏁 Event Has Ended' : '⏰ Registration Closed'}
+                  </div>
                 ) : (
-                  <button 
-                    style={modalRegisterButtonStyle} 
+                  <button
+                    style={modalRegisterButtonStyle}
                     onClick={() => handleRegister(selectedEvent)}
                   >
-                    {showRegistrationForm 
-                      ? '✅ Submit & Register' 
-                      : (selectedEvent.customFields?.length > 0 
-                        ? '📋 Fill Form & Register' 
+                    {showRegistrationForm
+                      ? '✅ Submit & Register'
+                      : (selectedEvent.customFields?.length > 0
+                        ? '📋 Fill Form & Register'
                         : (selectedEvent.type === 'Merchandise' ? '🛒 Buy Now' : '📝 Register Now')
                       )
                     }
                   </button>
-                )}
-              </div>
+                )
+              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Discussion Forum Section */}
-        {showDiscussionForum && selectedEvent && registeredEvents.some(e => e._id === selectedEvent._id) && (
-          <div style={modalOverlayStyle} onClick={() => setShowDiscussionForum(false)}>
-            <div style={{...modalContentStyle, maxWidth: '900px', maxHeight: '95vh'}} onClick={(e) => e.stopPropagation()}>
-              <button style={closeButtonStyle} onClick={() => setShowDiscussionForum(false)}>✕</button>
-              
-              <div style={modalHeaderStyle}>
-                <div style={modalIconStyle}>💬</div>
-                <h2 style={modalTitleStyle}>Discussion Forum</h2>
-                <p style={{margin: '10px 0 0 0', fontSize: '0.95rem', color: 'rgba(255,255,255,0.9)'}}>
-                  {selectedEvent.name}
+      {/* Discussion Forum Section */}
+      {showDiscussionForum && selectedEvent && registeredEvents.some(e => e._id === selectedEvent._id) && (
+        <div style={modalOverlayStyle} onClick={() => setShowDiscussionForum(false)}>
+          <div style={{ ...modalContentStyle, maxWidth: '900px', maxHeight: '95vh' }} onClick={(e) => e.stopPropagation()}>
+            <button style={closeButtonStyle} onClick={() => setShowDiscussionForum(false)}>✕</button>
+
+            <div style={modalHeaderStyle}>
+              <div style={modalIconStyle}>💬</div>
+              <h2 style={modalTitleStyle}>Discussion Forum</h2>
+              <p style={{ margin: '10px 0 0 0', fontSize: '0.95rem', color: 'rgba(255,255,255,0.9)' }}>
+                {selectedEvent.name}
+              </p>
+            </div>
+
+            <div style={{ ...modalBodyStyle, padding: 0, maxHeight: '70vh' }}>
+              <DiscussionForum
+                eventId={selectedEvent._id}
+                isOrganizer={false}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Team Creation Modal (Invite-Based System) */}
+      {showTeamCreateModal && selectedEvent && (
+        <div style={modalOverlayStyle} onClick={() => setShowTeamCreateModal(false)}>
+          <div style={{ ...modalContentStyle, maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}>
+            <button style={modalCloseButtonStyle} onClick={() => setShowTeamCreateModal(false)}>✕</button>
+
+            <div style={modalHeaderStyle}>
+              <div style={modalIconStyle}>🎯</div>
+              <h2 style={modalTitleStyle}>Create Team</h2>
+              <p style={{ margin: '10px 0 0 0', fontSize: '0.95rem', color: '#666' }}>
+                {selectedEvent.name}
+              </p>
+            </div>
+
+            <div style={modalBodyStyle}>
+              {/* Info Box */}
+              <div style={{ ...infoBoxStyle, marginBottom: '20px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9' }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#1976d2', lineHeight: '1.6' }}>
+                  <strong>📋 How it works:</strong><br />
+                  1️⃣ Enter ALL team member emails (including yourself if you want to be a member)<br />
+                  2️⃣ Everyone receives invitations and must accept to join<br />
+                  3️⃣ When all members accept, your team is complete!<br />
+                  4️⃣ Tickets are generated automatically for all accepted members
                 </p>
               </div>
 
-              <div style={{...modalBodyStyle, padding: 0, maxHeight: '70vh'}}>
-                <DiscussionForum 
-                  eventId={selectedEvent._id} 
-                  isOrganizer={false}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* NEW: Team Creation Modal (Invite-Based System) */}
-        {showTeamCreateModal && selectedEvent && (
-          <div style={modalOverlayStyle} onClick={() => setShowTeamCreateModal(false)}>
-            <div style={{...modalContentStyle, maxWidth: '700px'}} onClick={(e) => e.stopPropagation()}>
-              <button style={modalCloseButtonStyle} onClick={() => setShowTeamCreateModal(false)}>✕</button>
-              
-              <div style={modalHeaderStyle}>
-                <div style={modalIconStyle}>🎯</div>
-                <h2 style={modalTitleStyle}>Create Team</h2>
-                <p style={{margin: '10px 0 0 0', fontSize: '0.95rem', color: '#666'}}>
-                  {selectedEvent.name}
+              {/* Team Size Info */}
+              <div style={{ ...infoBoxStyle, marginBottom: '20px' }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+                  <strong>Team Size Range:</strong> {selectedEvent.teamDetails?.minTeamSize} - {selectedEvent.teamDetails?.maxTeamSize} members<br />
+                  <strong>Fee per Member:</strong> ₹{selectedEvent.registrationFee}<br />
+                  <strong>Total Fee (if {teamCreateData.teamSize} members):</strong> ₹{teamCreateData.teamSize * selectedEvent.registrationFee}
                 </p>
               </div>
 
-              <div style={modalBodyStyle}>
-                {/* Info Box */}
-                <div style={{...infoBoxStyle, marginBottom: '20px', backgroundColor: '#e8f4fd', border: '1px solid #90caf9'}}>
-                  <p style={{margin: 0, fontSize: '0.9rem', color: '#1976d2', lineHeight: '1.6'}}>
-                    <strong>📋 How it works:</strong><br/>
-                    1️⃣ Enter ALL team member emails (including yourself if you want to be a member)<br/>
-                    2️⃣ Everyone receives invitations and must accept to join<br/>
-                    3️⃣ When all members accept, your team is complete!<br/>
-                    4️⃣ Tickets are generated automatically for all accepted members
-                  </p>
-                </div>
-
-                {/* Team Size Info */}
-                <div style={{...infoBoxStyle, marginBottom: '20px'}}>
-                  <p style={{margin: 0, fontSize: '0.9rem', color: '#666'}}>
-                    <strong>Team Size Range:</strong> {selectedEvent.teamDetails?.minTeamSize} - {selectedEvent.teamDetails?.maxTeamSize} members<br/>
-                    <strong>Fee per Member:</strong> ₹{selectedEvent.registrationFee}<br/>
-                    <strong>Total Fee (if {teamCreateData.teamSize} members):</strong> ₹{teamCreateData.teamSize * selectedEvent.registrationFee}
-                  </p>
-                </div>
-
-                {/* Custom Form Fields */}
-                {selectedEvent.customFields && selectedEvent.customFields.length > 0 && (
-                  <div style={{marginBottom: '20px'}}>
-                    <h4 style={{margin: '0 0 15px 0', fontSize: '1rem', color: '#333'}}>
-                      Additional Information
-                    </h4>
-                    {selectedEvent.customFields.map((field, idx) => (
-                      <div key={idx} style={{marginBottom: '15px'}}>
-                        <label style={teamLabelStyle}>
-                          {field.fieldName} {field.isRequired && <span style={{color: '#f44336'}}>*</span>}
-                        </label>
-                        {field.fieldType === 'text' && (
-                          <input 
-                            type="text"
-                            style={teamInputStyle}
-                            placeholder={field.placeholder || `Enter ${field.fieldName}`}
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                          />
-                        )}
-                        {field.fieldType === 'dropdown' && (
-                          <select
-                            style={teamInputStyle}
-                            value={customFormData[field.fieldName] || ''}
-                            onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})}
-                          >
-                            <option value="">Select {field.fieldName}</option>
-                            {field.options?.map((opt, i) => (
-                              <option key={i} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        )}
-                        {field.fieldType === 'checkbox' && (
-                          <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-                            <input 
-                              type="checkbox"
-                              checked={customFormData[field.fieldName] || false}
-                              onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.checked})}
-                            />
-                            <span>{field.placeholder || field.fieldName}</span>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Team Details */}
-                <div style={{marginBottom: '20px'}}>
-                  <label style={teamLabelStyle}>Team Name *</label>
-                  <input 
-                    type="text"
-                    style={teamInputStyle}
-                    placeholder="Enter your team name"
-                    value={teamCreateData.teamName}
-                    onChange={(e) => setTeamCreateData({...teamCreateData, teamName: e.target.value})}
-                  />
-                </div>
-
-                <div style={{marginBottom: '20px'}}>
-                  <label style={teamLabelStyle}>Team Size *</label>
-                  <input 
-                    type="number"
-                    style={teamInputStyle}
-                    min={selectedEvent.teamDetails?.minTeamSize || 2}
-                    max={selectedEvent.teamDetails?.maxTeamSize || 4}
-                    value={teamCreateData.teamSize}
-                    onChange={(e) => {
-                      const newSize = parseInt(e.target.value);
-                      const min = selectedEvent.teamDetails?.minTeamSize || 2;
-                      const max = selectedEvent.teamDetails?.maxTeamSize || 4;
-                      
-                      if (newSize >= min && newSize <= max) {
-                        const emailsNeeded = newSize - 1; // Exclude leader
-                        const currentEmails = teamCreateData.memberEmails;
-                        let newEmails = [...currentEmails];
-                        
-                        if (emailsNeeded > currentEmails.length) {
-                          // Add empty fields
-                          newEmails = [...newEmails, ...Array(emailsNeeded - currentEmails.length).fill('')];
-                        } else if (emailsNeeded < currentEmails.length) {
-                          // Remove extra fields
-                          newEmails = newEmails.slice(0, emailsNeeded);
-                        }
-                        
-                        setTeamCreateData({
-                          ...teamCreateData,
-                          teamSize: newSize,
-                          memberEmails: newEmails
-                        });
-                      }
-                    }}
-                  />
-                  <small style={{color: '#666', fontSize: '0.85rem'}}>
-                    Must be between {selectedEvent.teamDetails?.minTeamSize || 2} and {selectedEvent.teamDetails?.maxTeamSize || 4}
-                  </small>
-                </div>
-
-                {/* Member Emails */}
-                <div style={{marginBottom: '20px'}}>
-                  <label style={teamLabelStyle}>
-                    Team Member Emails * ({teamCreateData.memberEmails.length} of {teamCreateData.teamSize} needed)
-                  </label>
-                  <p style={{margin: '5px 0 10px 0', fontSize: '0.85rem', color: '#666'}}>
-                    Enter emails of ALL team members (include yourself if you want to be a member)
-                  </p>
-                  
-                  {teamCreateData.memberEmails.map((email, index) => (
-                    <div key={index} style={{display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center'}}>
-                      <span style={{minWidth: '30px', color: '#666', fontSize: '0.9rem'}}>
-                        {index + 1}.
-                      </span>
-                      <input 
-                        type="email"
-                        style={{...teamInputStyle, flex: 1, margin: 0}}
-                        placeholder={`Member ${index + 1} email`}
-                        value={email}
-                        onChange={(e) => updateTeamEmail(index, e.target.value)}
-                      />
-                      {teamCreateData.memberEmails.length > 1 && (
-                        <button
-                          onClick={() => removeTeamEmailField(index)}
-                          style={{
-                            ...actionButtonStyle,
-                            backgroundColor: '#f44336',
-                            padding: '8px 12px',
-                            fontSize: '0.85rem'
-                          }}
+              {/* Custom Form Fields */}
+              {selectedEvent.customFields && selectedEvent.customFields.length > 0 && (
+                <div style={{ marginBottom: '20px' }}>
+                  <h4 style={{ margin: '0 0 15px 0', fontSize: '1rem', color: '#333' }}>
+                    Additional Information
+                  </h4>
+                  {selectedEvent.customFields.map((field, idx) => (
+                    <div key={idx} style={{ marginBottom: '15px' }}>
+                      <label style={teamLabelStyle}>
+                        {field.fieldName} {field.isRequired && <span style={{ color: '#f44336' }}>*</span>}
+                      </label>
+                      {field.fieldType === 'text' && (
+                        <input
+                          type="text"
+                          style={teamInputStyle}
+                          placeholder={field.placeholder || `Enter ${field.fieldName}`}
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
+                        />
+                      )}
+                      {field.fieldType === 'dropdown' && (
+                        <select
+                          style={teamInputStyle}
+                          value={customFormData[field.fieldName] || ''}
+                          onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })}
                         >
-                          Remove
-                        </button>
+                          <option value="">Select {field.fieldName}</option>
+                          {field.options?.map((opt, i) => (
+                            <option key={i} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      )}
+                      {field.fieldType === 'checkbox' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <input
+                            type="checkbox"
+                            checked={customFormData[field.fieldName] || false}
+                            onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.checked })}
+                          />
+                          <span>{field.placeholder || field.fieldName}</span>
+                        </div>
                       )}
                     </div>
                   ))}
+                </div>
+              )}
 
-                  {teamCreateData.memberEmails.length < (selectedEvent.teamDetails?.maxTeamSize || 4) && (
-                    <button
-                      onClick={addTeamEmailField}
-                      style={{
-                        ...actionButtonStyle,
-                        backgroundColor: '#4caf50',
-                        width: '100%',
-                        marginTop: '10px'
-                      }}
-                    >
-                      + Add Another Member Email
-                    </button>
-                  )}
+              {/* Team Details */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={teamLabelStyle}>Team Name *</label>
+                <input
+                  type="text"
+                  style={teamInputStyle}
+                  placeholder="Enter your team name"
+                  value={teamCreateData.teamName}
+                  onChange={(e) => setTeamCreateData({ ...teamCreateData, teamName: e.target.value })}
+                />
+              </div>
+
+              <div style={{ marginBottom: '20px' }}>
+                <label style={teamLabelStyle}>Team Size *</label>
+                <input
+                  type="number"
+                  style={teamInputStyle}
+                  min={selectedEvent.teamDetails?.minTeamSize || 2}
+                  max={selectedEvent.teamDetails?.maxTeamSize || 4}
+                  value={teamCreateData.teamSize}
+                  onChange={(e) => {
+                    const newSize = parseInt(e.target.value);
+                    const min = selectedEvent.teamDetails?.minTeamSize || 2;
+                    const max = selectedEvent.teamDetails?.maxTeamSize || 4;
+
+                    if (newSize >= min && newSize <= max) {
+                      const emailsNeeded = newSize - 1; // Exclude leader
+                      const currentEmails = teamCreateData.memberEmails;
+                      let newEmails = [...currentEmails];
+
+                      if (emailsNeeded > currentEmails.length) {
+                        // Add empty fields
+                        newEmails = [...newEmails, ...Array(emailsNeeded - currentEmails.length).fill('')];
+                      } else if (emailsNeeded < currentEmails.length) {
+                        // Remove extra fields
+                        newEmails = newEmails.slice(0, emailsNeeded);
+                      }
+
+                      setTeamCreateData({
+                        ...teamCreateData,
+                        teamSize: newSize,
+                        memberEmails: newEmails
+                      });
+                    }
+                  }}
+                />
+                <small style={{ color: '#666', fontSize: '0.85rem' }}>
+                  Must be between {selectedEvent.teamDetails?.minTeamSize || 2} and {selectedEvent.teamDetails?.maxTeamSize || 4}
+                </small>
+              </div>
+
+              {/* Member Emails */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={teamLabelStyle}>
+                  Team Member Emails * ({teamCreateData.memberEmails.length} of {teamCreateData.teamSize} needed)
+                </label>
+                <p style={{ margin: '5px 0 10px 0', fontSize: '0.85rem', color: '#666' }}>
+                  Enter emails of ALL team members (include yourself if you want to be a member)
+                </p>
+
+                {teamCreateData.memberEmails.map((email, index) => (
+                  <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                    <span style={{ minWidth: '30px', color: '#666', fontSize: '0.9rem' }}>
+                      {index + 1}.
+                    </span>
+                    <input
+                      type="email"
+                      style={{ ...teamInputStyle, flex: 1, margin: 0 }}
+                      placeholder={`Member ${index + 1} email`}
+                      value={email}
+                      onChange={(e) => updateTeamEmail(index, e.target.value)}
+                    />
+                    {teamCreateData.memberEmails.length > 1 && (
+                      <button
+                        onClick={() => removeTeamEmailField(index)}
+                        style={{
+                          ...actionButtonStyle,
+                          backgroundColor: '#f44336',
+                          padding: '8px 12px',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {teamCreateData.memberEmails.length < (selectedEvent.teamDetails?.maxTeamSize || 4) && (
+                  <button
+                    onClick={addTeamEmailField}
+                    style={{
+                      ...actionButtonStyle,
+                      backgroundColor: '#4caf50',
+                      width: '100%',
+                      marginTop: '10px'
+                    }}
+                  >
+                    + Add Another Member Email
+                  </button>
+                )}
+              </div>
+
+              {/* Submit Button */}
+              <button
+                onClick={handleCreateTeam}
+                style={{
+                  ...actionButtonStyle,
+                  backgroundColor: '#1976d2',
+                  width: '100%',
+                  padding: '14px',
+                  fontSize: '1rem',
+                  fontWeight: 'bold'
+                }}
+              >
+                🚀 Create Team & Send Invites
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Team Registration Form Modal */}
+      {showTeamForm && selectedEvent && (
+        <div style={modalOverlayStyle} onClick={() => setShowTeamForm(false)}>
+          <div style={{ ...modalContentStyle, maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}>
+            <button style={modalCloseButtonStyle} onClick={() => setShowTeamForm(false)}>✕</button>
+
+            <div style={modalHeaderStyle}>
+              <div style={modalIconStyle}>👥</div>
+              <h2 style={modalTitleStyle}>Team Registration</h2>
+              <p style={{ margin: '10px 0 0 0', fontSize: '0.95rem', color: '#666' }}>
+                {selectedEvent.name}
+              </p>
+            </div>
+
+            <div style={modalBodyStyle}>
+              <div style={{ ...infoBoxStyle, marginBottom: '20px' }}>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+                  <strong>Team Size:</strong> {selectedEvent.teamDetails?.minTeamSize} - {selectedEvent.teamDetails?.maxTeamSize} members<br />
+                  <strong>Fee per Member:</strong> ₹{selectedEvent.registrationFee}<br />
+                  <strong>Total Fee:</strong> ₹{teamFormData.members.length * selectedEvent.registrationFee}
+                </p>
+              </div>
+
+              {/* Team Details */}
+              <div style={{ marginBottom: '20px' }}>
+                <label style={teamLabelStyle}>Team Name *</label>
+                <input
+                  type="text"
+                  style={teamInputStyle}
+                  placeholder="Enter team name"
+                  value={teamFormData.teamName}
+                  onChange={(e) => setTeamFormData({ ...teamFormData, teamName: e.target.value })}
+                  required
+                />
+              </div>
+
+              {/* POC Details */}
+              <div style={{ marginBottom: '20px', padding: '15px', background: '#f0f4ff', borderRadius: '8px' }}>
+                <h4 style={{ margin: '0 0 15px 0', color: '#667eea' }}>📞 Point of Contact (POC)</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <label style={teamLabelStyle}>POC Name *</label>
+                    <input
+                      type="text"
+                      style={teamInputStyle}
+                      placeholder="POC Name"
+                      value={teamFormData.pocName}
+                      onChange={(e) => setTeamFormData({ ...teamFormData, pocName: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={teamLabelStyle}>POC Email *</label>
+                    <input
+                      type="email"
+                      style={teamInputStyle}
+                      placeholder="POC Email"
+                      value={teamFormData.pocEmail}
+                      onChange={(e) => setTeamFormData({ ...teamFormData, pocEmail: e.target.value })}
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Team Members */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h4 style={{ margin: 0, color: '#333' }}>👤 Team Members ({teamFormData.members.length})</h4>
+                  <button
+                    type="button"
+                    style={{ ...teamAddButtonStyle }}
+                    onClick={addTeamMember}
+                    disabled={teamFormData.members.length >= (selectedEvent.teamDetails?.maxTeamSize || 4)}
+                  >
+                    + Add Member
+                  </button>
                 </div>
 
-                {/* Submit Button */}
+                {teamFormData.members.map((member, index) => (
+                  <div key={index} style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr auto',
+                    gap: '10px',
+                    marginBottom: '10px',
+                    padding: '10px',
+                    background: '#f9f9f9',
+                    borderRadius: '8px'
+                  }}>
+                    <input
+                      type="text"
+                      style={teamInputStyle}
+                      placeholder={`Member ${index + 1} Name *`}
+                      value={member.name}
+                      onChange={(e) => updateTeamMember(index, 'name', e.target.value)}
+                      required
+                    />
+                    <input
+                      type="email"
+                      style={teamInputStyle}
+                      placeholder={`Member ${index + 1} Email *`}
+                      value={member.email}
+                      onChange={(e) => updateTeamMember(index, 'email', e.target.value)}
+                      required
+                    />
+                    {teamFormData.members.length > 1 && (
+                      <button
+                        type="button"
+                        style={teamRemoveButtonStyle}
+                        onClick={() => removeTeamMember(index)}
+                      >
+                        🗑️
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Custom Registration Form Fields in Team Registration */}
+              {selectedEvent.customFields && selectedEvent.customFields.length > 0 && (
+                <div style={{
+                  background: '#f0f4ff',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  marginBottom: '20px',
+                  border: '2px solid #90caf9'
+                }}>
+                  <h4 style={{ margin: '0 0 15px 0', color: '#667eea', fontSize: '1rem' }}>
+                    📋 Additional Registration Fields
+                  </h4>
+                  {[...(selectedEvent.customFields || [])].sort((a, b) => (a.order || 0) - (b.order || 0)).map((field, idx) => (
+                    <div key={idx} style={{ marginBottom: '12px' }}>
+                      <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#333', marginBottom: '5px' }}>
+                        {field.fieldName} {field.isRequired && <span style={{ color: '#f44336' }}>*</span>}
+                      </label>
+                      {field.fieldType === 'Text' && (
+                        <input type="text" placeholder={field.placeholder || ''} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })} style={teamInputStyle} />
+                      )}
+                      {field.fieldType === 'Textarea' && (
+                        <textarea placeholder={field.placeholder || ''} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })} style={{ ...teamInputStyle, minHeight: '70px', resize: 'vertical' }} />
+                      )}
+                      {field.fieldType === 'Number' && (
+                        <input type="number" placeholder={field.placeholder || ''} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })} style={teamInputStyle} />
+                      )}
+                      {field.fieldType === 'Date' && (
+                        <input type="date" value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })} style={teamInputStyle} />
+                      )}
+                      {field.fieldType === 'Email' && (
+                        <input type="email" placeholder={field.placeholder || 'email@example.com'} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })} style={teamInputStyle} />
+                      )}
+                      {field.fieldType === 'Phone' && (
+                        <input type="tel" placeholder={field.placeholder || '+91 9876543210'} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })} style={teamInputStyle} />
+                      )}
+                      {field.fieldType === 'Dropdown' && (
+                        <select value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.value })} style={{ ...teamInputStyle, background: 'white' }}>
+                          <option value="">Select...</option>
+                          {(field.options || []).map((opt, oi) => <option key={oi} value={opt}>{opt}</option>)}
+                        </select>
+                      )}
+                      {field.fieldType === 'Checkbox' && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0' }}>
+                          <input type="checkbox" checked={!!customFormData[field.fieldName]} onChange={(e) => setCustomFormData({ ...customFormData, [field.fieldName]: e.target.checked })} style={{ width: '18px', height: '18px' }} />
+                          <span style={{ fontSize: '0.9rem', color: '#555' }}>{field.placeholder || field.fieldName}</span>
+                        </label>
+                      )}
+                      {field.fieldType === 'FileUpload' && (
+                        <input type="file" onChange={(e) => { if (e.target.files[0]) setCustomFormData({ ...customFormData, [field.fieldName]: e.target.files[0].name }); }} style={{ width: '100%', padding: '8px', border: '2px dashed #ddd', borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '10px' }}>
                 <button
-                  onClick={handleCreateTeam}
-                  style={{
-                    ...actionButtonStyle,
-                    backgroundColor: '#1976d2',
-                    width: '100%',
-                    padding: '14px',
-                    fontSize: '1rem',
-                    fontWeight: 'bold'
-                  }}
+                  style={{ ...modalRegisterButtonStyle, flex: 1, background: '#f5576c' }}
+                  onClick={() => { setShowTeamForm(false); setCustomFormData({}); }}
                 >
-                  🚀 Create Team & Send Invites
+                  Cancel
+                </button>
+                <button
+                  style={{ ...modalRegisterButtonStyle, flex: 2 }}
+                  onClick={handleTeamRegister}
+                >
+                  Register Team (₹{teamFormData.members.length * selectedEvent.registrationFee})
                 </button>
               </div>
             </div>
           </div>
-        )}
-
-        {/* Team Registration Form Modal */}
-        {showTeamForm && selectedEvent && (
-          <div style={modalOverlayStyle} onClick={() => setShowTeamForm(false)}>
-            <div style={{...modalContentStyle, maxWidth: '700px'}} onClick={(e) => e.stopPropagation()}>
-              <button style={modalCloseButtonStyle} onClick={() => setShowTeamForm(false)}>✕</button>
-              
-              <div style={modalHeaderStyle}>
-                <div style={modalIconStyle}>👥</div>
-                <h2 style={modalTitleStyle}>Team Registration</h2>
-                <p style={{margin: '10px 0 0 0', fontSize: '0.95rem', color: '#666'}}>
-                  {selectedEvent.name}
-                </p>
-              </div>
-
-              <div style={modalBodyStyle}>
-                <div style={{...infoBoxStyle, marginBottom: '20px'}}>
-                  <p style={{margin: 0, fontSize: '0.9rem', color: '#666'}}>
-                    <strong>Team Size:</strong> {selectedEvent.teamDetails?.minTeamSize} - {selectedEvent.teamDetails?.maxTeamSize} members<br/>
-                    <strong>Fee per Member:</strong> ₹{selectedEvent.registrationFee}<br/>
-                    <strong>Total Fee:</strong> ₹{teamFormData.members.length * selectedEvent.registrationFee}
-                  </p>
-                </div>
-
-                {/* Team Details */}
-                <div style={{marginBottom: '20px'}}>
-                  <label style={teamLabelStyle}>Team Name *</label>
-                  <input 
-                    type="text"
-                    style={teamInputStyle}
-                    placeholder="Enter team name"
-                    value={teamFormData.teamName}
-                    onChange={(e) => setTeamFormData({...teamFormData, teamName: e.target.value})}
-                    required
-                  />
-                </div>
-
-                {/* POC Details */}
-                <div style={{marginBottom: '20px', padding: '15px', background: '#f0f4ff', borderRadius: '8px'}}>
-                  <h4 style={{margin: '0 0 15px 0', color: '#667eea'}}>📞 Point of Contact (POC)</h4>
-                  <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-                    <div>
-                      <label style={teamLabelStyle}>POC Name *</label>
-                      <input 
-                        type="text"
-                        style={teamInputStyle}
-                        placeholder="POC Name"
-                        value={teamFormData.pocName}
-                        onChange={(e) => setTeamFormData({...teamFormData, pocName: e.target.value})}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label style={teamLabelStyle}>POC Email *</label>
-                      <input 
-                        type="email"
-                        style={teamInputStyle}
-                        placeholder="POC Email"
-                        value={teamFormData.pocEmail}
-                        onChange={(e) => setTeamFormData({...teamFormData, pocEmail: e.target.value})}
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Team Members */}
-                <div style={{marginBottom: '20px'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
-                    <h4 style={{margin: 0, color: '#333'}}>👤 Team Members ({teamFormData.members.length})</h4>
-                    <button 
-                      type="button"
-                      style={{...teamAddButtonStyle}}
-                      onClick={addTeamMember}
-                      disabled={teamFormData.members.length >= (selectedEvent.teamDetails?.maxTeamSize || 4)}
-                    >
-                      + Add Member
-                    </button>
-                  </div>
-                  
-                  {teamFormData.members.map((member, index) => (
-                    <div key={index} style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 1fr auto',
-                      gap: '10px',
-                      marginBottom: '10px',
-                      padding: '10px',
-                      background: '#f9f9f9',
-                      borderRadius: '8px'
-                    }}>
-                      <input 
-                        type="text"
-                        style={teamInputStyle}
-                        placeholder={`Member ${index + 1} Name *`}
-                        value={member.name}
-                        onChange={(e) => updateTeamMember(index, 'name', e.target.value)}
-                        required
-                      />
-                      <input 
-                        type="email"
-                        style={teamInputStyle}
-                        placeholder={`Member ${index + 1} Email *`}
-                        value={member.email}
-                        onChange={(e) => updateTeamMember(index, 'email', e.target.value)}
-                        required
-                      />
-                      {teamFormData.members.length > 1 && (
-                        <button 
-                          type="button"
-                          style={teamRemoveButtonStyle}
-                          onClick={() => removeTeamMember(index)}
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Custom Registration Form Fields in Team Registration */}
-                {selectedEvent.customFields && selectedEvent.customFields.length > 0 && (
-                  <div style={{
-                    background: '#f0f4ff',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    marginBottom: '20px',
-                    border: '2px solid #90caf9'
-                  }}>
-                    <h4 style={{ margin: '0 0 15px 0', color: '#667eea', fontSize: '1rem' }}>
-                      📋 Additional Registration Fields
-                    </h4>
-                    {[...(selectedEvent.customFields || [])].sort((a, b) => (a.order || 0) - (b.order || 0)).map((field, idx) => (
-                      <div key={idx} style={{ marginBottom: '12px' }}>
-                        <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#333', marginBottom: '5px' }}>
-                          {field.fieldName} {field.isRequired && <span style={{ color: '#f44336' }}>*</span>}
-                        </label>
-                        {field.fieldType === 'Text' && (
-                          <input type="text" placeholder={field.placeholder || ''} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})} style={teamInputStyle} />
-                        )}
-                        {field.fieldType === 'Textarea' && (
-                          <textarea placeholder={field.placeholder || ''} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})} style={{...teamInputStyle, minHeight: '70px', resize: 'vertical'}} />
-                        )}
-                        {field.fieldType === 'Number' && (
-                          <input type="number" placeholder={field.placeholder || ''} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})} style={teamInputStyle} />
-                        )}
-                        {field.fieldType === 'Date' && (
-                          <input type="date" value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})} style={teamInputStyle} />
-                        )}
-                        {field.fieldType === 'Email' && (
-                          <input type="email" placeholder={field.placeholder || 'email@example.com'} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})} style={teamInputStyle} />
-                        )}
-                        {field.fieldType === 'Phone' && (
-                          <input type="tel" placeholder={field.placeholder || '+91 9876543210'} value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})} style={teamInputStyle} />
-                        )}
-                        {field.fieldType === 'Dropdown' && (
-                          <select value={customFormData[field.fieldName] || ''} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.value})} style={{...teamInputStyle, background: 'white'}}>
-                            <option value="">Select...</option>
-                            {(field.options || []).map((opt, oi) => <option key={oi} value={opt}>{opt}</option>)}
-                          </select>
-                        )}
-                        {field.fieldType === 'Checkbox' && (
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0' }}>
-                            <input type="checkbox" checked={!!customFormData[field.fieldName]} onChange={(e) => setCustomFormData({...customFormData, [field.fieldName]: e.target.checked})} style={{ width: '18px', height: '18px' }} />
-                            <span style={{ fontSize: '0.9rem', color: '#555' }}>{field.placeholder || field.fieldName}</span>
-                          </label>
-                        )}
-                        {field.fieldType === 'FileUpload' && (
-                          <input type="file" onChange={(e) => { if (e.target.files[0]) setCustomFormData({...customFormData, [field.fieldName]: e.target.files[0].name}); }} style={{ width: '100%', padding: '8px', border: '2px dashed #ddd', borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }} />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{display: 'flex', gap: '10px'}}>
-                  <button 
-                    style={{...modalRegisterButtonStyle, flex: 1, background: '#f5576c'}}
-                    onClick={() => { setShowTeamForm(false); setCustomFormData({}); }}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    style={{...modalRegisterButtonStyle, flex: 2}}
-                    onClick={handleTeamRegister}
-                  >
-                    Register Team (₹{teamFormData.members.length * selectedEvent.registrationFee})
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
+      )}
     </div>
   );
 };
@@ -2459,6 +2590,34 @@ const registeredBadgeStyle = {
   fontSize: '0.75rem',
   fontWeight: '600',
   boxShadow: '0 4px 15px rgba(76, 175, 80, 0.4)',
+  zIndex: 10
+};
+
+const deadlinePassedBadgeStyle = {
+  position: 'absolute',
+  top: '10px',
+  right: '10px',
+  background: '#f5576c',
+  color: 'white',
+  padding: '6px 14px',
+  borderRadius: '20px',
+  fontSize: '0.75rem',
+  fontWeight: 'bold',
+  boxShadow: '0 4px 12px rgba(245, 87, 108, 0.3)',
+  zIndex: 10
+};
+
+const eventEndedBadgeStyle = {
+  position: 'absolute',
+  top: '10px',
+  right: '10px',
+  background: '#9e9e9e',
+  color: 'white',
+  padding: '6px 14px',
+  borderRadius: '20px',
+  fontSize: '0.75rem',
+  fontWeight: 'bold',
+  boxShadow: '0 4px 12px rgba(158, 158, 158, 0.3)',
   zIndex: 10
 };
 

@@ -1,14 +1,18 @@
 # Felicity Event Management System - Deployment URLs
 
 ## Production URLs
-Frontend URL: [TO BE FILLED AFTER VERCEL DEPLOYMENT]
-Backend API URL: [TO BE FILLED AFTER RENDER DEPLOYMENT]
+Frontend URL: https://felicity-event-management-snowy.vercel.app
+Backend API URL: https://felicity-event-management-snowy.onrender.com
 
 ## Health Check Endpoint
-API Health: [TO BE FILLED AFTER RENDER DEPLOYMENT]/health
+API Health: https://felicity-event-management-snowy.onrender.com/health
+
+## Environment Variables Set
+- Vercel: REACT_APP_API_URL = https://felicity-event-management-snowy.onrender.com
+- Render: MONGO_URI = [MongoDB Atlas Connection String]
 
 ## Deployment Date
-Deployed on: [TO BE FILLED]
+Deployed on: February 2026
 
 ## Default Admin Credentials
 Username: admin@felicity.com
@@ -19,3 +23,4 @@ Password: admin123
 - Backend hosted on Render
 - Database on MongoDB Atlas
 - Free tier deployments (backend may sleep after 15 min inactivity)
+- CORS configured to allow Vercel frontend domain
