@@ -54,5 +54,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/teams', require('./routes/teamRoutes')); // Team management routes
 app.use('/api/attendance', require('./routes/attendanceRoutes')); // Attendance tracking routes
 app.use('/api/forum', require('./routes/forumRoutes')); // Discussion forum routes
+app.use('/api/feedback', require('./routes/feedbackRoutes')); // Feedback routes
+app.use('/api/security', require('./routes/securityRoutes')); // Security monitoring routes
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

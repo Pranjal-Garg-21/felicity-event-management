@@ -16,7 +16,7 @@ const OrganizerDashboard = () => {
   const [statusFilter, setStatusFilter] = useState('All'); // Filter events by status
   const [attendanceFilter, setAttendanceFilter] = useState('all'); // Filter participants by attendance: 'all', 'attended', 'notYet'
   const [attendanceData, setAttendanceData] = useState(null); // Attendance data from attendance API
-  
+
   // Profile editing state
   const [profileData, setProfileData] = useState({
     organizerName: '',
@@ -27,7 +27,13 @@ const OrganizerDashboard = () => {
     discordWebhook: ''
   });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  
+
+  // Feedback viewing state
+  const [feedbackList, setFeedbackList] = useState([]);
+  const [feedbackStats, setFeedbackStats] = useState(null);
+  const [selectedRatingFilter, setSelectedRatingFilter] = useState('all');
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+
   // QR Scanner state
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [scanResult, setScanResult] = useState(null); // { verified, participant, event, message }
@@ -38,7 +44,7 @@ const OrganizerDashboard = () => {
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const scanIntervalRef = useRef(null);
-  
+
   // Create Event Form State
   const [formData, setFormData] = useState({
     name: '',
@@ -88,7 +94,7 @@ const OrganizerDashboard = () => {
         console.log('Profile data:', profileRes.data);
         console.log('Followers:', profileRes.data.followers);
         setFollowers(profileRes.data.followers || []);
-        
+
         // Populate profile data for editing
         setProfileData({
           organizerName: profileRes.data.organizerName || '',
@@ -106,12 +112,12 @@ const OrganizerDashboard = () => {
       }
     };
     if (user?.token) fetchData();
-    
+
     // Auto-refresh every 30 seconds to keep participant counts in sync
     const interval = setInterval(() => {
       if (user?.token) fetchData();
     }, 30000);
-    
+
     // Auto-refresh when page becomes visible (e.g., when navigating back from QR Scanner)
     const handleVisibilityChange = () => {
       if (!document.hidden && user?.token) {
@@ -124,9 +130,9 @@ const OrganizerDashboard = () => {
         }
       }
     };
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -140,30 +146,30 @@ const OrganizerDashboard = () => {
       console.log('🔄 Fetching event details for eventId:', eventId);
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.get(`http://localhost:5000/api/events/${eventId}`, config);
-      
+
       console.log('📊 Event data received:', data.name);
       console.log('👥 Participants count:', data.participants?.length);
       console.log('🎫 Participants with eventTickets:', data.participants?.filter(p => p.eventTickets?.length > 0).length);
-      
+
       // Log first participant's ticket info for debugging
       if (data.participants && data.participants.length > 0) {
         const firstParticipant = data.participants[0];
         console.log('🔍 First participant:', firstParticipant.firstName, firstParticipant.lastName);
         console.log('🎫 Their tickets:', firstParticipant.eventTickets);
-        
+
         // Check for scanned tickets
-        const scannedTickets = firstParticipant.eventTickets?.filter(t => 
+        const scannedTickets = firstParticipant.eventTickets?.filter(t =>
           t.eventId?.toString() === eventId && t.scanned
         );
         console.log('✅ Scanned tickets for this event:', scannedTickets);
       }
-      
+
       setSelectedEventDetails(data);
       setActiveTab('details');
-      
+
       // Fetch attendance data from attendance API
       await fetchAttendanceData(eventId);
-      
+
       // Also refresh the main event list to keep participant counts in sync
       const eventRes = await axios.get('http://localhost:5000/api/events/my-events', config);
       setMyEvents(eventRes.data);
@@ -179,14 +185,14 @@ const OrganizerDashboard = () => {
       console.log('📊 Fetching attendance data from attendance API for:', eventId);
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.get(`http://localhost:5000/api/attendance/event/${eventId}`, config);
-      
+
       console.log('✅ Attendance data received:', {
         totalScanned: data.totalScanned,
         totalNotScanned: data.totalNotScanned,
         scannedCount: data.scannedParticipants?.length,
         notScannedCount: data.notScannedParticipants?.length
       });
-      
+
       setAttendanceData(data);
     } catch (err) {
       console.error("Error fetching attendance data:", err);
@@ -208,7 +214,7 @@ const OrganizerDashboard = () => {
     const rows = selectedEventDetails.participants.map((p, index) => {
       let hasScanned = false;
       let scannedAt = 'N/A';
-      
+
       if (attendanceData) {
         // Use attendance API data
         const scannedParticipant = attendanceData.scannedParticipants?.find(sp => sp.email === p.email);
@@ -220,7 +226,7 @@ const OrganizerDashboard = () => {
         hasScanned = ticket?.scanned;
         scannedAt = ticket?.scannedAt ? new Date(ticket.scannedAt).toLocaleString() : 'N/A';
       }
-      
+
       return [
         index + 1,
         `${p.firstName} ${p.lastName}`,
@@ -248,7 +254,7 @@ const OrganizerDashboard = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
+
     console.log('✅ CSV exported successfully');
   };
 
@@ -271,10 +277,10 @@ const OrganizerDashboard = () => {
 
   // Custom Fields Management
   const addCustomField = () => {
-    setCustomFields([...customFields, { 
-      fieldName: '', 
-      fieldType: 'Text', 
-      isRequired: false, 
+    setCustomFields([...customFields, {
+      fieldName: '',
+      fieldType: 'Text',
+      isRequired: false,
       placeholder: '',
       options: [], // For dropdown/checkbox
       order: customFields.length // Auto-assign order
@@ -311,10 +317,81 @@ const OrganizerDashboard = () => {
     setCustomFields(newFields.map((f, i) => ({ ...f, order: i })));
   };
 
+  // Feedback functions for organizers
+  const fetchEventFeedback = async (eventId) => {
+    console.log('📊 fetchEventFeedback CALLED with eventId:', eventId);
+    console.log('📊 selectedRatingFilter:', selectedRatingFilter);
+    setFeedbackLoading(true);
+    try {
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      const params = selectedRatingFilter !== 'all' ? { rating: selectedRatingFilter } : {};
+      console.log('📊 Making API calls...');
+
+      const [feedbackRes, statsRes] = await Promise.all([
+        axios.get(`http://localhost:5000/api/feedback/event/${eventId}`, { ...config, params }),
+        axios.get(`http://localhost:5000/api/feedback/event/${eventId}/stats`, config)
+      ]);
+
+      console.log('📊 API Response - Feedback:', feedbackRes.data);
+      console.log('📊 API Response - Stats:', statsRes.data);
+      setFeedbackList(feedbackRes.data);
+      setFeedbackStats(statsRes.data);
+      alert(`Loaded ${feedbackRes.data.length} feedback entries`);
+    } catch (error) {
+      console.error('❌ Error fetching feedback:', error);
+      console.error('❌ Error details:', error.response?.data);
+      alert('Error: ' + (error.response?.data?.message || error.message));
+      setFeedbackList([]);
+      setFeedbackStats(null);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
+  const exportFeedback = async (eventId) => {
+    try {
+      const config = {
+        headers: { Authorization: `Bearer ${user.token}` },
+        responseType: 'blob'
+      };
+
+      const response = await axios.get(
+        `http://localhost:5000/api/feedback/event/${eventId}/export`,
+        config
+      );
+
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${selectedEventDetails.name}-feedback.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      alert('✅ Feedback exported successfully!');
+    } catch (error) {
+      console.error('Error exporting feedback:', error);
+      alert('Failed to export feedback');
+    }
+  };
+
+  const renderStars = (rating) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <span key={i} style={{ color: i <= rating ? '#ffd700' : '#ddd', fontSize: '1.2rem' }}>
+          {i <= rating ? '⭐' : '☆'}
+        </span>
+      );
+    }
+    return stars;
+  };
+
   // Handle Publishing a Draft Event
   const handlePublishDraft = async (eventId) => {
     const event = selectedEventDetails;
-    
+
     // Validate that all required fields are filled for publishing
     if (!event.eligibility || !event.registrationDeadline || !event.registrationLimit || !event.venue) {
       alert('❌ Cannot publish incomplete event!\n\nPlease ensure the following fields are filled:\n- Eligibility\n- Registration Deadline\n- Registration Limit\n- Venue\n\nEdit the event to add these details.');
@@ -336,22 +413,22 @@ const OrganizerDashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      
+
       // Update event status to Published
-      await axios.put(`http://localhost:5000/api/events/${eventId}`, 
-        { status: 'Published' }, 
+      await axios.put(`http://localhost:5000/api/events/${eventId}`,
+        { status: 'Published' },
         config
       );
-      
+
       alert('🎉 Event Published Successfully!');
-      
+
       // Refresh events list
       const eventRes = await axios.get('http://localhost:5000/api/events/my-events', config);
       setMyEvents(eventRes.data);
-      
+
       // Refresh the current event details
       await fetchEventDetails(eventId);
-      
+
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.message || "Error publishing event. Please try again.");
@@ -516,7 +593,7 @@ const OrganizerDashboard = () => {
   const getQRStatusMessage = (event) => {
     if (!event) return '';
     const todayStr = toLocalDateStr(new Date());
-    
+
     const startDate = event.startDate ? toLocalDateStr(event.startDate) : null;
     const endDate = event.endDate ? toLocalDateStr(event.endDate) : null;
 
@@ -555,7 +632,7 @@ const OrganizerDashboard = () => {
 
       // Step 1: Decode the QR code from image
       const { data: qrData } = await axios.post('http://localhost:5000/api/events/scan-qr', formData, config);
-      
+
       if (!qrData.success || !qrData.payload) {
         setScanError('No QR code found in the uploaded image. Please try again.');
         setScanLoading(false);
@@ -604,8 +681,8 @@ const OrganizerDashboard = () => {
     setScanResult(null);
     setScanError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }
       });
       streamRef.current = stream;
       setCameraActive(true);
@@ -640,7 +717,7 @@ const OrganizerDashboard = () => {
         formData.append('image', blob, 'frame.png');
 
         const { data: qrData } = await axios.post('http://localhost:5000/api/events/scan-qr', formData, config);
-        
+
         if (qrData.success && qrData.payload && qrData.payload.ticketId) {
           // QR found! Stop scanning and verify
           stopCamera();
@@ -737,7 +814,7 @@ const OrganizerDashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      
+
       // Prepare event sessions with combined date and time (if any)
       const formattedSessions = eventSessions
         .filter(session => session.startDate && session.endDate)
@@ -749,7 +826,7 @@ const OrganizerDashboard = () => {
         }));
 
       // Prepare data
-      const eventData = { 
+      const eventData = {
         ...formData,
         status, // Set the status (Draft or Published)
         eventSessions: formattedSessions,
@@ -758,7 +835,7 @@ const OrganizerDashboard = () => {
         startDate: formattedSessions.length > 0 ? formattedSessions[0].startDate : undefined,
         endDate: formattedSessions.length > 0 ? formattedSessions[formattedSessions.length - 1].endDate : undefined
       };
-      
+
       // For team events, add team details and make min/max mandatory
       if (formData.type === 'Team') {
         if (!formData.minTeamSize || !formData.maxTeamSize) {
@@ -771,11 +848,11 @@ const OrganizerDashboard = () => {
           requiresPOC: true
         };
       }
-      
+
       await axios.post('http://localhost:5000/api/events', eventData, config);
-      
+
       alert(status === 'Draft' ? "💾 Event Saved as Draft!" : "🎉 Event Published Successfully!");
-      
+
       // Reset form
       setFormData({
         name: '',
@@ -792,11 +869,11 @@ const OrganizerDashboard = () => {
       });
       setEventSessions([{ sessionName: '', startDate: '', startTime: '', endDate: '', endTime: '', venue: '' }]);
       setCustomFields([]);
-      
+
       // Refresh events list
       const eventRes = await axios.get('http://localhost:5000/api/events/my-events', config);
       setMyEvents(eventRes.data);
-      
+
       // Switch to published events tab
       setActiveTab('published');
     } catch (err) {
@@ -814,7 +891,7 @@ const OrganizerDashboard = () => {
       await axios.put('http://localhost:5000/api/users/profile', profileData, config);
       alert('✅ Profile updated successfully!');
       setIsEditingProfile(false);
-      
+
       // Refresh profile data
       const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
       setProfileData({
@@ -860,26 +937,26 @@ const OrganizerDashboard = () => {
           <h2 style={navTitleStyle}>Organizer Portal</h2>
         </div>
         <div style={navMenuStyle}>
-          <button 
-            onClick={() => setActiveTab('published')} 
+          <button
+            onClick={() => setActiveTab('published')}
             style={activeTab === 'published' ? activeNavButtonStyle : navButtonStyle}
           >
             📅 Published Events
           </button>
-          <button 
-            onClick={() => setActiveTab('create')} 
+          <button
+            onClick={() => setActiveTab('create')}
             style={activeTab === 'create' ? activeNavButtonStyle : navButtonStyle}
           >
             ➕ Create Event
           </button>
-          <button 
-            onClick={() => setActiveTab('analytics')} 
+          <button
+            onClick={() => setActiveTab('analytics')}
             style={activeTab === 'analytics' ? activeNavButtonStyle : navButtonStyle}
           >
             📊 Analytics
           </button>
-          <button 
-            onClick={() => { setActiveTab('profile'); setIsEditingProfile(false); }} 
+          <button
+            onClick={() => { setActiveTab('profile'); setIsEditingProfile(false); }}
             style={activeTab === 'profile' ? activeNavButtonStyle : navButtonStyle}
           >
             ⚙️ Profile
@@ -915,7 +992,7 @@ const OrganizerDashboard = () => {
                         const lastName = f.lastName || '';
                         const fullName = `${firstName} ${lastName}`.trim();
                         const displayName = fullName || f.email?.split('@')[0] || 'User';
-                        
+
                         return (
                           <tr key={f._id || f.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
                             <td style={{ padding: '12px' }}>{displayName}</td>
@@ -944,8 +1021,8 @@ const OrganizerDashboard = () => {
               {myEvents.length > 0 && (
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
                   {['All', 'Draft', 'Published', 'Ongoing', 'Closed'].map(status => {
-                    const count = status === 'All' 
-                      ? myEvents.length 
+                    const count = status === 'All'
+                      ? myEvents.length
                       : myEvents.filter(e => (e.status || 'Draft') === status).length;
                     const isActive = statusFilter === status;
                     const statusColors = {
@@ -980,7 +1057,7 @@ const OrganizerDashboard = () => {
                   })}
                 </div>
               )}
-              
+
               {myEvents.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
                   <p style={{ fontSize: '3rem', margin: '0 0 20px 0' }}>📭</p>
@@ -995,33 +1072,33 @@ const OrganizerDashboard = () => {
                   {myEvents
                     .filter(event => statusFilter === 'All' || (event.status || 'Draft') === statusFilter)
                     .map((event) => (
-                    <div 
-                      key={event._id} 
-                      style={eventItemCardStyle}
-                      onClick={() => fetchEventDetails(event._id)}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                        <h4 style={{ margin: '0', color: '#333' }}>{event.name}</h4>
-                        <span style={getStatusBadgeStyle(event.status || 'Draft')}>
-                          {event.status || 'Draft'}
-                        </span>
-                      </div>
-                      <p style={{ margin: '5px 0', color: '#888', fontSize: '0.85rem', fontWeight: '600' }}>
-                        {event.type === 'Merchandise' ? '🛍️ Merchandise' : event.type === 'Team' ? '👥 Team Event' : '👤 Individual'}
-                      </p>
-                      {event.startDate && (
-                        <p style={{ margin: '5px 0', color: '#666', fontSize: '0.9rem' }}>
-                          🕒 {new Date(event.startDate).toLocaleDateString()}
+                      <div
+                        key={event._id}
+                        style={eventItemCardStyle}
+                        onClick={() => fetchEventDetails(event._id)}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                          <h4 style={{ margin: '0', color: '#333' }}>{event.name}</h4>
+                          <span style={getStatusBadgeStyle(event.status || 'Draft')}>
+                            {event.status || 'Draft'}
+                          </span>
+                        </div>
+                        <p style={{ margin: '5px 0', color: '#888', fontSize: '0.85rem', fontWeight: '600' }}>
+                          {event.type === 'Merchandise' ? '🛍️ Merchandise' : event.type === 'Team' ? '👥 Team Event' : '👤 Individual'}
                         </p>
-                      )}
-                      <p style={{ margin: '5px 0', color: '#666', fontSize: '0.9rem' }}>
-                        👥 {event.participants?.length || 0} / {event.registrationLimit || 'N/A'} registered
-                      </p>
-                      <p style={{ margin: '10px 0 0 0', color: '#667eea', fontSize: '0.85rem', fontWeight: '600' }}>
-                        Click to view details →
-                      </p>
-                    </div>
-                  ))}
+                        {event.startDate && (
+                          <p style={{ margin: '5px 0', color: '#666', fontSize: '0.9rem' }}>
+                            🕒 {new Date(event.startDate).toLocaleDateString()}
+                          </p>
+                        )}
+                        <p style={{ margin: '5px 0', color: '#666', fontSize: '0.9rem' }}>
+                          👥 {event.participants?.length || 0} / {event.registrationLimit || 'N/A'} registered
+                        </p>
+                        <p style={{ margin: '10px 0 0 0', color: '#667eea', fontSize: '0.85rem', fontWeight: '600' }}>
+                          Click to view details →
+                        </p>
+                      </div>
+                    ))}
                   {myEvents.filter(event => statusFilter === 'All' || (event.status || 'Draft') === statusFilter).length === 0 && (
                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px', color: '#999' }}>
                       <p style={{ fontSize: '1.1rem' }}>No {statusFilter} events found</p>
@@ -1038,126 +1115,126 @@ const OrganizerDashboard = () => {
           <div style={formBoxStyle}>
             <h2 style={formTitleStyle}>🆕 Create New Event</h2>
             <form onSubmit={handleCreateEvent} style={gridFormStyle}>
-              
-              <input 
-                type="text" 
-                placeholder="Event Name" 
-                style={inputStyle} 
+
+              <input
+                type="text"
+                placeholder="Event Name"
+                style={inputStyle}
                 value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})} 
-                required 
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                required
               />
-              
-              <select 
-                style={inputStyle} 
+
+              <select
+                style={inputStyle}
                 value={formData.type}
-                onChange={e => setFormData({...formData, type: e.target.value})}
+                onChange={e => setFormData({ ...formData, type: e.target.value })}
               >
                 <option value="Normal">Normal Event (Individual)</option>
                 <option value="Team">Team Event</option>
                 <option value="Merchandise">Merchandise Event</option>
               </select>
 
-              <textarea 
-                placeholder="Event Description" 
-                style={{...inputStyle, gridColumn: 'span 2', minHeight: '100px'}} 
+              <textarea
+                placeholder="Event Description"
+                style={{ ...inputStyle, gridColumn: 'span 2', minHeight: '100px' }}
                 value={formData.description}
-                onChange={e => setFormData({...formData, description: e.target.value})} 
-                required 
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                required
               />
 
               {/* Team Event Specific Fields */}
               {formData.type === 'Team' && (
                 <>
-                  <input 
-                    type="number" 
-                    placeholder="Minimum Team Size (e.g., 2)" 
-                    style={inputStyle} 
+                  <input
+                    type="number"
+                    placeholder="Minimum Team Size (e.g., 2)"
+                    style={inputStyle}
                     value={formData.minTeamSize}
-                    onChange={e => setFormData({...formData, minTeamSize: e.target.value})} 
-                    required 
+                    onChange={e => setFormData({ ...formData, minTeamSize: e.target.value })}
+                    required
                     min="1"
                   />
-                  
-                  <input 
-                    type="number" 
-                    placeholder="Maximum Team Size (e.g., 4)" 
-                    style={inputStyle} 
+
+                  <input
+                    type="number"
+                    placeholder="Maximum Team Size (e.g., 4)"
+                    style={inputStyle}
                     value={formData.maxTeamSize}
-                    onChange={e => setFormData({...formData, maxTeamSize: e.target.value})} 
-                    required 
+                    onChange={e => setFormData({ ...formData, maxTeamSize: e.target.value })}
+                    required
                     min={formData.minTeamSize || "1"}
                   />
-                  
-                  <div style={{...infoBoxStyle, gridColumn: 'span 2'}}>
-                    <p style={{margin: 0, fontSize: '0.9rem', color: '#666'}}>
-                      ℹ️ <strong>Team Registration:</strong> Participants will register as teams with {formData.minTeamSize || 'X'}-{formData.maxTeamSize || 'Y'} members. 
+
+                  <div style={{ ...infoBoxStyle, gridColumn: 'span 2' }}>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+                      ℹ️ <strong>Team Registration:</strong> Participants will register as teams with {formData.minTeamSize || 'X'}-{formData.maxTeamSize || 'Y'} members.
                       Registration fee will be charged per participant (Total = Fee × Team Size).
                     </p>
                   </div>
                 </>
               )}
 
-              <input 
-                type="text" 
-                placeholder="Eligibility (e.g. All Students)" 
-                style={inputStyle} 
+              <input
+                type="text"
+                placeholder="Eligibility (e.g. All Students)"
+                style={inputStyle}
                 value={formData.eligibility}
-                onChange={e => setFormData({...formData, eligibility: e.target.value})} 
-                required 
+                onChange={e => setFormData({ ...formData, eligibility: e.target.value })}
+                required
               />
-              
-              <input 
-                type="number" 
-                placeholder={formData.type === 'Team' ? 'Registration Limit (Number of Teams)' : 'Registration Limit'} 
-                style={inputStyle} 
+
+              <input
+                type="number"
+                placeholder={formData.type === 'Team' ? 'Registration Limit (Number of Teams)' : 'Registration Limit'}
+                style={inputStyle}
                 value={formData.registrationLimit}
-                onChange={e => setFormData({...formData, registrationLimit: e.target.value})} 
-                required 
+                onChange={e => setFormData({ ...formData, registrationLimit: e.target.value })}
+                required
               />
 
-              <input 
-                type="number" 
-                placeholder={formData.type === 'Team' ? 'Registration Fee per Participant (₹)' : 'Registration Fee (₹)'} 
-                style={inputStyle} 
+              <input
+                type="number"
+                placeholder={formData.type === 'Team' ? 'Registration Fee per Participant (₹)' : 'Registration Fee (₹)'}
+                style={inputStyle}
                 value={formData.registrationFee}
-                onChange={e => setFormData({...formData, registrationFee: e.target.value})} 
-                required 
+                onChange={e => setFormData({ ...formData, registrationFee: e.target.value })}
+                required
               />
 
-              <input 
-                type="text" 
-                placeholder="Venue / Location" 
-                style={inputStyle} 
+              <input
+                type="text"
+                placeholder="Venue / Location"
+                style={inputStyle}
                 value={formData.venue}
-                onChange={e => setFormData({...formData, venue: e.target.value})} 
-                required 
+                onChange={e => setFormData({ ...formData, venue: e.target.value })}
+                required
               />
 
-              <input 
-                type="text" 
-                placeholder="Tags (comma separated)" 
-                style={inputStyle} 
+              <input
+                type="text"
+                placeholder="Tags (comma separated)"
+                style={inputStyle}
                 value={formData.tags}
-                onChange={e => setFormData({...formData, tags: e.target.value.split(',')})} 
+                onChange={e => setFormData({ ...formData, tags: e.target.value.split(',') })}
               />
 
               <div style={dateGroup}>
                 <label style={labelStyle}>Registration Deadline *</label>
-                <input 
-                  type="datetime-local" 
-                  style={inputStyle} 
+                <input
+                  type="datetime-local"
+                  style={inputStyle}
                   value={formData.registrationDeadline}
-                  onChange={e => setFormData({...formData, registrationDeadline: e.target.value})} 
-                  required 
+                  onChange={e => setFormData({ ...formData, registrationDeadline: e.target.value })}
+                  required
                 />
               </div>
 
               {/* Event Sessions Section */}
-              <div style={{gridColumn: 'span 2', marginTop: '20px'}}>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-                  <h3 style={{margin: 0, color: '#333'}}>📅 Event Sessions *</h3>
-                  <button 
+              <div style={{ gridColumn: 'span 2', marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0, color: '#333' }}>📅 Event Sessions *</h3>
+                  <button
                     type="button"
                     style={addButtonStyle}
                     onClick={addSession}
@@ -1165,7 +1242,7 @@ const OrganizerDashboard = () => {
                     + Add Session
                   </button>
                 </div>
-                <p style={{margin: '0 0 15px 0', fontSize: '0.9rem', color: '#666'}}>
+                <p style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: '#666' }}>
                   Add multiple sessions if your event spans different days/times (e.g., Day 1: 2-5pm, Day 2: 2-5pm)
                 </p>
 
@@ -1177,10 +1254,10 @@ const OrganizerDashboard = () => {
                     marginBottom: '15px',
                     border: '2px solid #eee'
                   }}>
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
-                      <h4 style={{margin: 0, color: '#667eea'}}>Session {index + 1}</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <h4 style={{ margin: 0, color: '#667eea' }}>Session {index + 1}</h4>
                       {eventSessions.length > 1 && (
-                        <button 
+                        <button
                           type="button"
                           style={removeButtonStyle}
                           onClick={() => removeSession(index)}
@@ -1190,15 +1267,15 @@ const OrganizerDashboard = () => {
                       )}
                     </div>
 
-                    <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginBottom: '10px'}}>
-                      <input 
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input
                         type="text"
                         style={inputStyle}
                         placeholder="Session Name (optional, e.g., 'Day 1', 'Opening Ceremony')"
                         value={session.sessionName}
                         onChange={(e) => updateSession(index, 'sessionName', e.target.value)}
                       />
-                      <input 
+                      <input
                         type="text"
                         style={inputStyle}
                         placeholder="Venue (optional)"
@@ -1207,10 +1284,10 @@ const OrganizerDashboard = () => {
                       />
                     </div>
 
-                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px'}}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px' }}>
                       <div>
-                        <label style={{...labelStyle, fontSize: '0.8rem'}}>Start Date *</label>
-                        <input 
+                        <label style={{ ...labelStyle, fontSize: '0.8rem' }}>Start Date *</label>
+                        <input
                           type="date"
                           style={inputStyle}
                           value={session.startDate}
@@ -1219,8 +1296,8 @@ const OrganizerDashboard = () => {
                         />
                       </div>
                       <div>
-                        <label style={{...labelStyle, fontSize: '0.8rem'}}>Start Time</label>
-                        <input 
+                        <label style={{ ...labelStyle, fontSize: '0.8rem' }}>Start Time</label>
+                        <input
                           type="time"
                           style={inputStyle}
                           value={session.startTime}
@@ -1228,8 +1305,8 @@ const OrganizerDashboard = () => {
                         />
                       </div>
                       <div>
-                        <label style={{...labelStyle, fontSize: '0.8rem'}}>End Date *</label>
-                        <input 
+                        <label style={{ ...labelStyle, fontSize: '0.8rem' }}>End Date *</label>
+                        <input
                           type="date"
                           style={inputStyle}
                           value={session.endDate}
@@ -1238,8 +1315,8 @@ const OrganizerDashboard = () => {
                         />
                       </div>
                       <div>
-                        <label style={{...labelStyle, fontSize: '0.8rem'}}>End Time</label>
-                        <input 
+                        <label style={{ ...labelStyle, fontSize: '0.8rem' }}>End Time</label>
+                        <input
                           type="time"
                           style={inputStyle}
                           value={session.endTime}
@@ -1252,10 +1329,10 @@ const OrganizerDashboard = () => {
               </div>
 
               {/* Custom Fields Section — Form Builder */}
-              <div style={{gridColumn: 'span 2', marginTop: '20px'}}>
-                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px'}}>
-                  <h3 style={{margin: 0, color: '#333'}}>🛠️ Registration Form Builder (Optional)</h3>
-                  <button 
+              <div style={{ gridColumn: 'span 2', marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0, color: '#333' }}>🛠️ Registration Form Builder (Optional)</h3>
+                  <button
                     type="button"
                     style={addButtonStyle}
                     onClick={addCustomField}
@@ -1263,11 +1340,11 @@ const OrganizerDashboard = () => {
                     + Add Field
                   </button>
                 </div>
-                <p style={{margin: '0 0 15px 0', fontSize: '0.9rem', color: '#666'}}>
+                <p style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: '#666' }}>
                   Build a custom registration form. Add fields, set types, mark as required, and drag to reorder.
                   Supported types: Text, Long Text, Number, Date, Email, Phone, Dropdown, Checkbox, and File Upload.
                 </p>
-                <p style={{margin: '0 0 15px 0', fontSize: '0.85rem', color: '#e65100', fontWeight: '600'}}>
+                <p style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: '#e65100', fontWeight: '600' }}>
                   ⚠️ The form will be <strong>locked</strong> after the first participant registers — no further edits to fields allowed.
                 </p>
 
@@ -1280,11 +1357,11 @@ const OrganizerDashboard = () => {
                     border: '2px solid #90caf9',
                     position: 'relative'
                   }}>
-                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px'}}>
-                      <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {/* Reorder Buttons */}
-                        <div style={{display: 'flex', flexDirection: 'column', gap: '2px'}}>
-                          <button 
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <button
                             type="button"
                             onClick={() => moveCustomField(index, -1)}
                             disabled={index === 0}
@@ -1300,7 +1377,7 @@ const OrganizerDashboard = () => {
                             }}
                             title="Move Up"
                           >▲</button>
-                          <button 
+                          <button
                             type="button"
                             onClick={() => moveCustomField(index, 1)}
                             disabled={index === customFields.length - 1}
@@ -1317,10 +1394,10 @@ const OrganizerDashboard = () => {
                             title="Move Down"
                           >▼</button>
                         </div>
-                        <h4 style={{margin: 0, color: '#667eea'}}>Field {index + 1}</h4>
-                        {field.isRequired && <span style={{color: '#f44336', fontSize: '0.75rem', fontWeight: '700', background: '#ffebee', padding: '2px 8px', borderRadius: '10px'}}>REQUIRED</span>}
+                        <h4 style={{ margin: 0, color: '#667eea' }}>Field {index + 1}</h4>
+                        {field.isRequired && <span style={{ color: '#f44336', fontSize: '0.75rem', fontWeight: '700', background: '#ffebee', padding: '2px 8px', borderRadius: '10px' }}>REQUIRED</span>}
                       </div>
-                      <button 
+                      <button
                         type="button"
                         style={removeButtonStyle}
                         onClick={() => removeCustomField(index)}
@@ -1329,15 +1406,15 @@ const OrganizerDashboard = () => {
                       </button>
                     </div>
 
-                    <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginBottom: '10px'}}>
-                      <input 
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input
                         type="text"
                         style={inputStyle}
                         placeholder="Field Name (e.g., 'T-Shirt Size', 'Resume Upload')"
                         value={field.fieldName}
                         onChange={(e) => updateCustomField(index, 'fieldName', e.target.value)}
                       />
-                      <select 
+                      <select
                         style={inputStyle}
                         value={field.fieldType}
                         onChange={(e) => updateCustomField(index, 'fieldType', e.target.value)}
@@ -1348,9 +1425,9 @@ const OrganizerDashboard = () => {
                       </select>
                     </div>
 
-                    <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px'}}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
                       {field.fieldType !== 'FileUpload' && field.fieldType !== 'Checkbox' && (
-                        <input 
+                        <input
                           type="text"
                           style={inputStyle}
                           placeholder="Placeholder text (optional)"
@@ -1359,24 +1436,24 @@ const OrganizerDashboard = () => {
                         />
                       )}
                       {(field.fieldType === 'FileUpload' || field.fieldType === 'Checkbox') && (
-                        <div style={{padding: '10px', fontSize: '0.85rem', color: '#888'}}>
+                        <div style={{ padding: '10px', fontSize: '0.85rem', color: '#888' }}>
                           {field.fieldType === 'FileUpload' ? '📎 Participants will upload a file' : '☑️ Participants will check/uncheck'}
                         </div>
                       )}
-                      <label style={{display: 'flex', alignItems: 'center', gap: '8px', padding: '10px'}}>
-                        <input 
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px' }}>
+                        <input
                           type="checkbox"
                           checked={field.isRequired}
                           onChange={(e) => updateCustomField(index, 'isRequired', e.target.checked)}
-                          style={{width: '18px', height: '18px'}}
+                          style={{ width: '18px', height: '18px' }}
                         />
-                        <span style={{fontSize: '0.9rem', color: '#666'}}>Required Field</span>
+                        <span style={{ fontSize: '0.9rem', color: '#666' }}>Required Field</span>
                       </label>
                     </div>
 
                     {(field.fieldType === 'Dropdown') && (
-                      <div style={{marginTop: '10px'}}>
-                        <input 
+                      <div style={{ marginTop: '10px' }}>
+                        <input
                           type="text"
                           style={inputStyle}
                           placeholder="Dropdown options (comma separated, e.g., 'S, M, L, XL')"
@@ -1384,9 +1461,9 @@ const OrganizerDashboard = () => {
                           onChange={(e) => updateCustomFieldOptions(index, e.target.value)}
                         />
                         {field.options?.length > 0 && (
-                          <div style={{display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px'}}>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
                             {field.options.map((opt, oi) => (
-                              <span key={oi} style={{background: '#667eea', color: 'white', padding: '3px 10px', borderRadius: '12px', fontSize: '0.8rem'}}>{opt}</span>
+                              <span key={oi} style={{ background: '#667eea', color: 'white', padding: '3px 10px', borderRadius: '12px', fontSize: '0.8rem' }}>{opt}</span>
                             ))}
                           </div>
                         )}
@@ -1394,39 +1471,39 @@ const OrganizerDashboard = () => {
                     )}
 
                     {/* Preview */}
-                    <div style={{marginTop: '12px', padding: '10px', background: '#fff', borderRadius: '6px', border: '1px dashed #ccc'}}>
-                      <div style={{fontSize: '0.75rem', color: '#999', marginBottom: '4px', fontWeight: '600'}}>PREVIEW:</div>
-                      <label style={{fontSize: '0.9rem', fontWeight: '600', color: '#333'}}>
-                        {field.fieldName || 'Field Name'} {field.isRequired && <span style={{color: '#f44336'}}>*</span>}
+                    <div style={{ marginTop: '12px', padding: '10px', background: '#fff', borderRadius: '6px', border: '1px dashed #ccc' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#999', marginBottom: '4px', fontWeight: '600' }}>PREVIEW:</div>
+                      <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#333' }}>
+                        {field.fieldName || 'Field Name'} {field.isRequired && <span style={{ color: '#f44336' }}>*</span>}
                       </label>
-                      {field.fieldType === 'Text' && <input type="text" disabled placeholder={field.placeholder || 'Text input'} style={{...inputStyle, opacity: 0.6, marginTop: '4px'}} />}
-                      {field.fieldType === 'Textarea' && <textarea disabled placeholder={field.placeholder || 'Long text input'} style={{...inputStyle, opacity: 0.6, marginTop: '4px', minHeight: '60px'}} />}
-                      {field.fieldType === 'Number' && <input type="number" disabled placeholder={field.placeholder || '0'} style={{...inputStyle, opacity: 0.6, marginTop: '4px'}} />}
-                      {field.fieldType === 'Date' && <input type="date" disabled style={{...inputStyle, opacity: 0.6, marginTop: '4px'}} />}
-                      {field.fieldType === 'Email' && <input type="email" disabled placeholder={field.placeholder || 'email@example.com'} style={{...inputStyle, opacity: 0.6, marginTop: '4px'}} />}
-                      {field.fieldType === 'Phone' && <input type="tel" disabled placeholder={field.placeholder || '+91 9876543210'} style={{...inputStyle, opacity: 0.6, marginTop: '4px'}} />}
+                      {field.fieldType === 'Text' && <input type="text" disabled placeholder={field.placeholder || 'Text input'} style={{ ...inputStyle, opacity: 0.6, marginTop: '4px' }} />}
+                      {field.fieldType === 'Textarea' && <textarea disabled placeholder={field.placeholder || 'Long text input'} style={{ ...inputStyle, opacity: 0.6, marginTop: '4px', minHeight: '60px' }} />}
+                      {field.fieldType === 'Number' && <input type="number" disabled placeholder={field.placeholder || '0'} style={{ ...inputStyle, opacity: 0.6, marginTop: '4px' }} />}
+                      {field.fieldType === 'Date' && <input type="date" disabled style={{ ...inputStyle, opacity: 0.6, marginTop: '4px' }} />}
+                      {field.fieldType === 'Email' && <input type="email" disabled placeholder={field.placeholder || 'email@example.com'} style={{ ...inputStyle, opacity: 0.6, marginTop: '4px' }} />}
+                      {field.fieldType === 'Phone' && <input type="tel" disabled placeholder={field.placeholder || '+91 9876543210'} style={{ ...inputStyle, opacity: 0.6, marginTop: '4px' }} />}
                       {field.fieldType === 'Dropdown' && (
-                        <select disabled style={{...inputStyle, opacity: 0.6, marginTop: '4px'}}>
+                        <select disabled style={{ ...inputStyle, opacity: 0.6, marginTop: '4px' }}>
                           <option>Select...</option>
                           {(field.options || []).map((opt, oi) => <option key={oi}>{opt}</option>)}
                         </select>
                       )}
                       {field.fieldType === 'Checkbox' && (
-                        <label style={{display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', opacity: 0.6}}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', opacity: 0.6 }}>
                           <input type="checkbox" disabled /> {field.fieldName || 'Checkbox'}
                         </label>
                       )}
                       {field.fieldType === 'FileUpload' && (
-                        <input type="file" disabled style={{...inputStyle, opacity: 0.6, marginTop: '4px'}} />
+                        <input type="file" disabled style={{ ...inputStyle, opacity: 0.6, marginTop: '4px' }} />
                       )}
                     </div>
                   </div>
                 ))}
 
                 {customFields.length === 0 && (
-                  <div style={{textAlign: 'center', padding: '30px', background: '#fafafa', borderRadius: '8px', border: '2px dashed #ddd'}}>
-                    <p style={{fontSize: '1.1rem', color: '#999', margin: '0 0 10px 0'}}>📋 No custom fields added yet</p>
-                    <p style={{fontSize: '0.85rem', color: '#bbb', margin: 0}}>Click "+ Add Field" to build your registration form</p>
+                  <div style={{ textAlign: 'center', padding: '30px', background: '#fafafa', borderRadius: '8px', border: '2px dashed #ddd' }}>
+                    <p style={{ fontSize: '1.1rem', color: '#999', margin: '0 0 10px 0' }}>📋 No custom fields added yet</p>
+                    <p style={{ fontSize: '0.85rem', color: '#bbb', margin: 0 }}>Click "+ Add Field" to build your registration form</p>
                   </div>
                 )}
               </div>
@@ -1447,13 +1524,13 @@ const OrganizerDashboard = () => {
         {activeTab === 'details' && selectedEventDetails && (
           <div style={detailsContainerStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <button 
-                onClick={() => { setActiveTab('published'); setIsEditing(false); }} 
+              <button
+                onClick={() => { setActiveTab('published'); setIsEditing(false); }}
                 style={backButtonStyle}
               >
                 ← Back to Events
               </button>
-              
+
               <div style={{ display: 'flex', gap: '10px' }}>
                 {/* Refresh Button */}
                 <button
@@ -1478,21 +1555,21 @@ const OrganizerDashboard = () => {
                 >
                   🔄 Refresh
                 </button>
-                
+
                 {/* Edit Button - shown based on status rules */}
                 {(selectedEventDetails.status !== 'Closed' && selectedEventDetails.status !== 'Completed') && !isEditing && (
-                  <button 
-                    onClick={startEditing} 
+                  <button
+                    onClick={startEditing}
                     style={{ ...publishDraftButtonStyle, background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)', boxShadow: '0 4px 15px rgba(255, 152, 0, 0.4)' }}
                   >
                     ✏️ Edit Event
                   </button>
                 )}
-                
+
                 {/* Show Publish button for Draft events */}
                 {selectedEventDetails.status === 'Draft' && !isEditing && (
-                  <button 
-                    onClick={() => handlePublishDraft(selectedEventDetails._id)} 
+                  <button
+                    onClick={() => handlePublishDraft(selectedEventDetails._id)}
                     style={publishDraftButtonStyle}
                   >
                     🚀 Publish Event
@@ -1500,7 +1577,7 @@ const OrganizerDashboard = () => {
                 )}
               </div>
             </div>
-            
+
             <div style={detailsHeaderStyle}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                 <h2 style={{ margin: '0', color: '#333' }}>{selectedEventDetails.name}</h2>
@@ -1517,11 +1594,11 @@ const OrganizerDashboard = () => {
 
             {/* Draft Warning */}
             {selectedEventDetails.status === 'Draft' && (
-              <div style={{ 
-                background: '#fff3cd', 
-                border: '1px solid #ffc107', 
-                padding: '15px 20px', 
-                borderRadius: '8px', 
+              <div style={{
+                background: '#fff3cd',
+                border: '1px solid #ffc107',
+                padding: '15px 20px',
+                borderRadius: '8px',
                 marginBottom: '20px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1550,10 +1627,10 @@ const OrganizerDashboard = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h3 style={{ margin: 0, color: '#e65100' }}>✏️ Edit Event</h3>
                   <div style={{ padding: '6px 14px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '700', background: '#fff3e0', color: '#e65100', border: '1px solid #ffcc02' }}>
-                    {(selectedEventDetails.status || 'Draft') === 'Draft' 
-                      ? '🟢 All fields editable' 
-                      : (selectedEventDetails.status || 'Draft') === 'Published' 
-                        ? '🟡 Limited edits: Description, Deadline (extend), Limit (increase), Status' 
+                    {(selectedEventDetails.status || 'Draft') === 'Draft'
+                      ? '🟢 All fields editable'
+                      : (selectedEventDetails.status || 'Draft') === 'Published'
+                        ? '🟡 Limited edits: Description, Deadline (extend), Limit (increase), Status'
                         : '🔴 Only status change allowed'}
                   </div>
                 </div>
@@ -1621,7 +1698,7 @@ const OrganizerDashboard = () => {
                   {/* Registration Deadline - Draft & Published (extend only) */}
                   <div>
                     <label style={editLabelStyle}>
-                      Registration Deadline 
+                      Registration Deadline
                       {selectedEventDetails.status === 'Published' && <span style={{ color: '#4caf50', fontSize: '0.75rem' }}> ✓ Extend only</span>}
                     </label>
                     <input
@@ -1630,8 +1707,8 @@ const OrganizerDashboard = () => {
                       value={editData.registrationDeadline || ''}
                       onChange={e => setEditData({ ...editData, registrationDeadline: e.target.value })}
                       disabled={selectedEventDetails.status === 'Ongoing'}
-                      min={selectedEventDetails.status === 'Published' && selectedEventDetails.registrationDeadline 
-                        ? new Date(selectedEventDetails.registrationDeadline).toISOString().slice(0, 16) 
+                      min={selectedEventDetails.status === 'Published' && selectedEventDetails.registrationDeadline
+                        ? new Date(selectedEventDetails.registrationDeadline).toISOString().slice(0, 16)
                         : undefined}
                     />
                   </div>
@@ -1639,7 +1716,7 @@ const OrganizerDashboard = () => {
                   {/* Registration Limit - Draft & Published (increase only) */}
                   <div>
                     <label style={editLabelStyle}>
-                      Registration Limit 
+                      Registration Limit
                       {selectedEventDetails.status === 'Published' && <span style={{ color: '#4caf50', fontSize: '0.75rem' }}> ✓ Increase only</span>}
                     </label>
                     <input
@@ -1693,13 +1770,13 @@ const OrganizerDashboard = () => {
 
                 {/* Save / Cancel buttons */}
                 <div style={{ display: 'flex', gap: '15px', marginTop: '25px', justifyContent: 'flex-end' }}>
-                  <button 
+                  <button
                     onClick={() => setIsEditing(false)}
                     style={{ padding: '12px 24px', background: '#f0f0f0', color: '#666', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '600', fontSize: '1rem' }}
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={handleSaveEdit}
                     style={{ padding: '12px 30px', background: 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '700', fontSize: '1rem', boxShadow: '0 4px 15px rgba(76, 175, 80, 0.4)' }}
                   >
@@ -1737,7 +1814,7 @@ const OrganizerDashboard = () => {
                     <div style={infoItemStyle}>
                       <span style={infoLabelStyle}>Team Size:</span>
                       <span style={infoValueStyle}>
-                        {selectedEventDetails.teamDetails?.minTeamSize && selectedEventDetails.teamDetails?.maxTeamSize 
+                        {selectedEventDetails.teamDetails?.minTeamSize && selectedEventDetails.teamDetails?.maxTeamSize
                           ? `${selectedEventDetails.teamDetails.minTeamSize} - ${selectedEventDetails.teamDetails.maxTeamSize} members`
                           : <span style={{ color: '#f44336', fontStyle: 'italic' }}>Not Set</span>
                         }
@@ -1761,7 +1838,7 @@ const OrganizerDashboard = () => {
                 <div style={infoItemStyle}>
                   <span style={infoLabelStyle}>Registration Deadline:</span>
                   <span style={infoValueStyle}>
-                    {selectedEventDetails.registrationDeadline 
+                    {selectedEventDetails.registrationDeadline
                       ? new Date(selectedEventDetails.registrationDeadline).toLocaleDateString()
                       : <span style={{ color: '#f44336', fontStyle: 'italic' }}>Not Set</span>
                     }
@@ -1794,21 +1871,21 @@ const OrganizerDashboard = () => {
               <div style={participantsCardStyle}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
                   <h3 style={sectionTitleStyle}>👥 Registered Teams ({selectedEventDetails.teamRegistrations?.length || 0})</h3>
-                  
+
                   {/* Team Attendance Stats */}
                   {selectedEventDetails.teamRegistrations && selectedEventDetails.teamRegistrations.length > 0 && (() => {
-                    const allMembers = selectedEventDetails.teamRegistrations.flatMap(team => 
+                    const allMembers = selectedEventDetails.teamRegistrations.flatMap(team =>
                       team.members.map(m => m.email)
                     );
-                    
+
                     // Use attendance API data if available
                     let attendedMembers = 0;
                     if (attendanceData) {
                       // Count how many team members are in the scannedParticipants list
-                      attendedMembers = attendanceData.scannedParticipants?.filter(sp => 
+                      attendedMembers = attendanceData.scannedParticipants?.filter(sp =>
                         allMembers.includes(sp.email)
                       ).length || 0;
-                      
+
                       console.log('📊 Using attendance API data');
                       console.log('✅ Attended members from API:', attendedMembers);
                     } else {
@@ -1816,17 +1893,17 @@ const OrganizerDashboard = () => {
                       console.log('⚠️ Attendance API data not available, using eventTickets fallback');
                       attendedMembers = selectedEventDetails.participants?.filter(p => {
                         const isTeamMember = allMembers.includes(p.email);
-                        const hasScannedTicket = p.eventTickets?.some(t => 
+                        const hasScannedTicket = p.eventTickets?.some(t =>
                           t.eventId?.toString() === selectedEventDetails._id && t.scanned
                         );
                         return isTeamMember && hasScannedTicket;
                       }).length || 0;
                     }
-                    
+
                     const totalMembers = allMembers.length;
-                    
+
                     console.log('📊 Team attendance:', { attended: attendedMembers, total: totalMembers });
-                    
+
                     return (
                       <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
                         <div style={{ padding: '8px 16px', borderRadius: '8px', background: '#4caf50', color: 'white', fontSize: '0.9rem', fontWeight: 'bold' }}>
@@ -1860,7 +1937,7 @@ const OrganizerDashboard = () => {
                     );
                   })()}
                 </div>
-                
+
                 {selectedEventDetails.teamRegistrations && selectedEventDetails.teamRegistrations.length > 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     {selectedEventDetails.teamRegistrations.map((team, index) => {
@@ -1868,7 +1945,7 @@ const OrganizerDashboard = () => {
                       const teamAttendance = team.members.map(member => {
                         let hasScanned = false;
                         let scannedAt = null;
-                        
+
                         if (attendanceData) {
                           // Use attendance API data
                           const scannedParticipant = attendanceData.scannedParticipants?.find(sp => sp.email === member.email);
@@ -1881,7 +1958,7 @@ const OrganizerDashboard = () => {
                           hasScanned = ticket?.scanned || false;
                           scannedAt = ticket?.scannedAt;
                         }
-                        
+
                         return {
                           ...member,
                           hasScanned,
@@ -1889,7 +1966,7 @@ const OrganizerDashboard = () => {
                         };
                       });
                       const attendedCount = teamAttendance.filter(m => m.hasScanned).length;
-                      
+
                       return (
                         <div key={index} style={{
                           background: 'white',
@@ -1909,18 +1986,18 @@ const OrganizerDashboard = () => {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
                               {/* Team Attendance Badge */}
-                              <div style={{ 
-                                padding: '8px 12px', 
-                                borderRadius: '8px', 
+                              <div style={{
+                                padding: '8px 12px',
+                                borderRadius: '8px',
                                 background: attendedCount === team.members.length ? '#4caf50' : (attendedCount > 0 ? '#ff9800' : '#f44336'),
                                 color: 'white',
                                 fontSize: '0.85rem',
                                 fontWeight: 'bold',
                                 textAlign: 'center'
                               }}>
-                                {attendedCount === team.members.length ? '✅ All Present' : 
-                                 attendedCount > 0 ? `⏳ ${attendedCount}/${team.members.length}` : 
-                                 '❌ None Yet'}
+                                {attendedCount === team.members.length ? '✅ All Present' :
+                                  attendedCount > 0 ? `⏳ ${attendedCount}/${team.members.length}` :
+                                    '❌ None Yet'}
                               </div>
                               <div style={{ textAlign: 'right' }}>
                                 <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: '#999' }}>Total Fee</p>
@@ -1930,7 +2007,7 @@ const OrganizerDashboard = () => {
                               </div>
                             </div>
                           </div>
-                          
+
                           <div style={{ marginBottom: '15px', background: '#f0f4ff', padding: '12px', borderRadius: '8px' }}>
                             <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', fontWeight: '700', color: '#666' }}>
                               📞 Point of Contact:
@@ -1942,7 +2019,7 @@ const OrganizerDashboard = () => {
                               ✉️ {team.pocEmail}
                             </p>
                           </div>
-                          
+
                           <div>
                             <p style={{ margin: '0 0 10px 0', fontSize: '0.9rem', fontWeight: '700', color: '#666' }}>
                               Team Members:
@@ -1997,20 +2074,231 @@ const OrganizerDashboard = () => {
               </div>
             ) : (
               <div style={participantsCardStyle}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
-                <h3 style={sectionTitleStyle}>👥 Registered Participants ({selectedEventDetails.participants?.length || 0})</h3>
-                
-                {/* Attendance Stats & Export Button */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+                  <h3 style={sectionTitleStyle}>👥 Registered Participants ({selectedEventDetails.participants?.length || 0})</h3>
+
+                  {/* Attendance Stats & Export Button */}
+                  {selectedEventDetails.participants && selectedEventDetails.participants.length > 0 && (
+                    <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ padding: '8px 16px', borderRadius: '8px', background: '#4caf50', color: 'white', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        ✅ Attended: {selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length}
+                      </div>
+                      <div style={{ padding: '8px 16px', borderRadius: '8px', background: '#ff9800', color: 'white', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                        ⏳ Not Yet: {selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length}
+                      </div>
+                      <button
+                        onClick={exportAttendanceCSV}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          background: '#1976d2',
+                          color: 'white',
+                          border: 'none',
+                          fontSize: '0.9rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          transition: 'all 0.3s ease'
+                        }}
+                        onMouseEnter={(e) => e.target.style.background = '#1565c0'}
+                        onMouseLeave={(e) => e.target.style.background = '#1976d2'}
+                      >
+                        📊 Export CSV
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Attendance Filter Buttons */}
                 {selectedEventDetails.participants && selectedEventDetails.participants.length > 0 && (
-                  <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div style={{ padding: '8px 16px', borderRadius: '8px', background: '#4caf50', color: 'white', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                      ✅ Attended: {selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length}
-                    </div>
-                    <div style={{ padding: '8px 16px', borderRadius: '8px', background: '#ff9800', color: 'white', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                      ⏳ Not Yet: {selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length}
-                    </div>
+                  <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
                     <button
-                      onClick={exportAttendanceCSV}
+                      onClick={() => setAttendanceFilter('all')}
+                      style={{
+                        padding: '10px 20px',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '0.9rem',
+                        background: attendanceFilter === 'all' ? '#667eea' : '#e0e0e0',
+                        color: attendanceFilter === 'all' ? 'white' : '#333',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      All ({selectedEventDetails.participants.length})
+                    </button>
+                    <button
+                      onClick={() => setAttendanceFilter('attended')}
+                      style={{
+                        padding: '10px 20px',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '0.9rem',
+                        background: attendanceFilter === 'attended' ? '#4caf50' : '#e0e0e0',
+                        color: attendanceFilter === 'attended' ? 'white' : '#333',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      ✅ Attended ({attendanceData ? attendanceData.totalScanned : selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length})
+                    </button>
+                    <button
+                      onClick={() => setAttendanceFilter('notYet')}
+                      style={{
+                        padding: '10px 20px',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '0.9rem',
+                        background: attendanceFilter === 'notYet' ? '#ff9800' : '#e0e0e0',
+                        color: attendanceFilter === 'notYet' ? 'white' : '#333',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      ⏳ Not Yet Arrived ({attendanceData ? attendanceData.totalNotScanned : selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length})
+                    </button>
+                  </div>
+                )}
+
+                {selectedEventDetails.participants && selectedEventDetails.participants.length > 0 ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={participantTableStyle}>
+                      <thead>
+                        <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
+                          <th style={tableHeaderStyle}>#</th>
+                          <th style={tableHeaderStyle}>Name</th>
+                          <th style={tableHeaderStyle}>Email</th>
+                          <th style={tableHeaderStyle}>Contact</th>
+                          <th style={tableHeaderStyle}>College</th>
+                          <th style={tableHeaderStyle}>Attendance Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedEventDetails.participants
+                          .filter(p => {
+                            let hasScanned = false;
+
+                            if (attendanceData) {
+                              // Use attendance API data
+                              hasScanned = attendanceData.scannedParticipants?.some(sp => sp.email === p.email);
+                            } else {
+                              // Fallback to eventTickets
+                              hasScanned = p.eventTickets?.some(t =>
+                                t.eventId?.toString() === selectedEventDetails._id && t.scanned
+                              );
+                            }
+
+                            if (attendanceFilter === 'attended') return hasScanned;
+                            if (attendanceFilter === 'notYet') return !hasScanned;
+                            return true; // 'all'
+                          })
+                          .map((participant, index) => {
+                            let hasScanned = false;
+                            let scannedAt = null;
+
+                            if (attendanceData) {
+                              // Use attendance API data
+                              const scannedParticipant = attendanceData.scannedParticipants?.find(sp => sp.email === participant.email);
+                              hasScanned = !!scannedParticipant;
+                              scannedAt = scannedParticipant?.scannedAt;
+                            } else {
+                              // Fallback to eventTickets
+                              const ticket = participant.eventTickets?.find(t => t.eventId?.toString() === selectedEventDetails._id);
+                              hasScanned = ticket?.scanned;
+                              scannedAt = ticket?.scannedAt;
+                            }
+
+                            console.log(`📊 Rendering ${participant.firstName}: hasScanned=${hasScanned}, scannedAt=${scannedAt}`);
+
+                            return (
+                              <tr key={participant._id} style={{ borderBottom: '1px solid #eee' }}>
+                                <td style={tableCellStyle}>{index + 1}</td>
+                                <td style={tableCellStyle}>
+                                  {participant.firstName} {participant.lastName}
+                                </td>
+                                <td style={tableCellStyle}>{participant.email}</td>
+                                <td style={tableCellStyle}>{participant.contactNumber || 'N/A'}</td>
+                                <td style={tableCellStyle}>{participant.college || 'N/A'}</td>
+                                <td style={tableCellStyle}>
+                                  {hasScanned ? (
+                                    <div>
+                                      <span style={{
+                                        padding: '6px 12px',
+                                        borderRadius: '6px',
+                                        background: '#4caf50',
+                                        color: 'white',
+                                        fontSize: '0.85rem',
+                                        fontWeight: 'bold',
+                                        display: 'inline-block'
+                                      }}>
+                                        ✅ Attended
+                                      </span>
+                                      {scannedAt && (
+                                        <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '5px' }}>
+                                          {new Date(scannedAt).toLocaleString()}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '6px',
+                                      background: '#ff9800',
+                                      color: 'white',
+                                      fontSize: '0.85rem',
+                                      fontWeight: 'bold',
+                                      display: 'inline-block'
+                                    }}>
+                                      ⏳ Not Yet Arrived
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                    <p style={{ fontSize: '2rem', margin: '0 0 15px 0' }}>👤</p>
+                    <p style={{ fontSize: '1.1rem', margin: '0' }}>No participants registered yet</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===== EVENT FEEDBACK SECTION ===== */}
+            <div style={participantsCardStyle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '15px' }}>
+                <h3 style={sectionTitleStyle}>⭐ Event Feedback</h3>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={() => {
+                      console.log('🔘 LOAD FEEDBACK BUTTON CLICKED!', selectedEventDetails._id);
+                      fetchEventFeedback(selectedEventDetails._id);
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      background: '#4caf50',
+                      color: 'white',
+                      border: 'none',
+                      fontSize: '0.9rem',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔄 Load Feedback
+                  </button>
+                  {feedbackList.length > 0 && (
+                    <button
+                      onClick={() => exportFeedback(selectedEventDetails._id)}
                       style={{
                         padding: '8px 16px',
                         borderRadius: '8px',
@@ -2019,182 +2307,182 @@ const OrganizerDashboard = () => {
                         border: 'none',
                         fontSize: '0.9rem',
                         fontWeight: 'bold',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        transition: 'all 0.3s ease'
+                        cursor: 'pointer'
                       }}
-                      onMouseEnter={(e) => e.target.style.background = '#1565c0'}
-                      onMouseLeave={(e) => e.target.style.background = '#1976d2'}
                     >
-                      📊 Export CSV
+                      📥 Export CSV
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-              
-              {/* Attendance Filter Buttons */}
-              {selectedEventDetails.participants && selectedEventDetails.participants.length > 0 && (
-                <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
-                  <button
-                    onClick={() => setAttendanceFilter('all')}
-                    style={{
-                      padding: '10px 20px',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: 'bold',
-                      fontSize: '0.9rem',
-                      background: attendanceFilter === 'all' ? '#667eea' : '#e0e0e0',
-                      color: attendanceFilter === 'all' ? 'white' : '#333',
-                      transition: 'all 0.3s ease'
-                    }}
-                  >
-                    All ({selectedEventDetails.participants.length})
-                  </button>
-                  <button
-                    onClick={() => setAttendanceFilter('attended')}
-                    style={{
-                      padding: '10px 20px',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: 'bold',
-                      fontSize: '0.9rem',
-                      background: attendanceFilter === 'attended' ? '#4caf50' : '#e0e0e0',
-                      color: attendanceFilter === 'attended' ? 'white' : '#333',
-                      transition: 'all 0.3s ease'
-                    }}
-                  >
-                    ✅ Attended ({attendanceData ? attendanceData.totalScanned : selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length})
-                  </button>
-                  <button
-                    onClick={() => setAttendanceFilter('notYet')}
-                    style={{
-                      padding: '10px 20px',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: 'bold',
-                      fontSize: '0.9rem',
-                      background: attendanceFilter === 'notYet' ? '#ff9800' : '#e0e0e0',
-                      color: attendanceFilter === 'notYet' ? 'white' : '#333',
-                      transition: 'all 0.3s ease'
-                    }}
-                  >
-                    ⏳ Not Yet Arrived ({attendanceData ? attendanceData.totalNotScanned : selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length})
-                  </button>
+
+              {feedbackLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                  <p>Loading feedback...</p>
                 </div>
-              )}
-              
-              {selectedEventDetails.participants && selectedEventDetails.participants.length > 0 ? (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={participantTableStyle}>
-                    <thead>
-                      <tr style={{ background: '#f5f5f5', borderBottom: '2px solid #ddd' }}>
-                        <th style={tableHeaderStyle}>#</th>
-                        <th style={tableHeaderStyle}>Name</th>
-                        <th style={tableHeaderStyle}>Email</th>
-                        <th style={tableHeaderStyle}>Contact</th>
-                        <th style={tableHeaderStyle}>College</th>
-                        <th style={tableHeaderStyle}>Attendance Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedEventDetails.participants
-                        .filter(p => {
-                          let hasScanned = false;
-                          
-                          if (attendanceData) {
-                            // Use attendance API data
-                            hasScanned = attendanceData.scannedParticipants?.some(sp => sp.email === p.email);
-                          } else {
-                            // Fallback to eventTickets
-                            hasScanned = p.eventTickets?.some(t => 
-                              t.eventId?.toString() === selectedEventDetails._id && t.scanned
-                            );
-                          }
-                          
-                          if (attendanceFilter === 'attended') return hasScanned;
-                          if (attendanceFilter === 'notYet') return !hasScanned;
-                          return true; // 'all'
-                        })
-                        .map((participant, index) => {
-                          let hasScanned = false;
-                          let scannedAt = null;
-                          
-                          if (attendanceData) {
-                            // Use attendance API data
-                            const scannedParticipant = attendanceData.scannedParticipants?.find(sp => sp.email === participant.email);
-                            hasScanned = !!scannedParticipant;
-                            scannedAt = scannedParticipant?.scannedAt;
-                          } else {
-                            // Fallback to eventTickets
-                            const ticket = participant.eventTickets?.find(t => t.eventId?.toString() === selectedEventDetails._id);
-                            hasScanned = ticket?.scanned;
-                            scannedAt = ticket?.scannedAt;
-                          }
-                          
-                          console.log(`📊 Rendering ${participant.firstName}: hasScanned=${hasScanned}, scannedAt=${scannedAt}`);
-                          
-                          return (
-                            <tr key={participant._id} style={{ borderBottom: '1px solid #eee' }}>
-                              <td style={tableCellStyle}>{index + 1}</td>
-                              <td style={tableCellStyle}>
-                                {participant.firstName} {participant.lastName}
-                              </td>
-                              <td style={tableCellStyle}>{participant.email}</td>
-                              <td style={tableCellStyle}>{participant.contactNumber || 'N/A'}</td>
-                              <td style={tableCellStyle}>{participant.college || 'N/A'}</td>
-                              <td style={tableCellStyle}>
-                                {hasScanned ? (
-                                  <div>
-                                    <span style={{ 
-                                      padding: '6px 12px', 
-                                      borderRadius: '6px', 
-                                      background: '#4caf50', 
-                                      color: 'white', 
-                                      fontSize: '0.85rem',
-                                      fontWeight: 'bold',
-                                      display: 'inline-block'
-                                    }}>
-                                      ✅ Attended
-                                    </span>
-                                    {scannedAt && (
-                                      <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '5px' }}>
-                                        {new Date(scannedAt).toLocaleString()}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span style={{ 
-                                    padding: '6px 12px', 
-                                    borderRadius: '6px', 
-                                    background: '#ff9800', 
-                                    color: 'white', 
-                                    fontSize: '0.85rem',
-                                    fontWeight: 'bold',
-                                    display: 'inline-block'
-                                  }}>
-                                    ⏳ Not Yet Arrived
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+              ) : feedbackStats ? (
+                <>
+                  {/* Statistics Dashboard */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '15px',
+                    marginBottom: '25px'
+                  }}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      color: 'white',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+                        {feedbackStats.averageRating || 0}
+                      </div>
+                      <div style={{ marginTop: '8px' }}>
+                        {renderStars(Math.round(feedbackStats.averageRating))}
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '0.9rem', opacity: 0.9 }}>
+                        Average Rating
+                      </div>
+                    </div>
+
+                    <div style={{
+                      background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      color: 'white',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+                        {feedbackStats.totalFeedback}
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '0.9rem', opacity: 0.9 }}>
+                        Total Feedback
+                      </div>
+                    </div>
+
+                    <div style={{
+                      background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      color: 'white',
+                      textAlign: 'center'
+                    }}>
+                      <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>
+                        {feedbackStats.responseRate}%
+                      </div>
+                      <div style={{ marginTop: '8px', fontSize: '0.9rem', opacity: 0.9 }}>
+                        Response Rate
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rating Distribution */}
+                  <div style={{ marginBottom: '25px', padding: '20px', background: '#f8f9fa', borderRadius: '12px' }}>
+                    <h4 style={{ margin: '0 0 15px', fontSize: '1rem', color: '#333' }}>Rating Distribution</h4>
+                    {[5, 4, 3, 2, 1].map(rating => (
+                      <div key={rating} style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ width: '80px', fontSize: '0.9rem', fontWeight: '600' }}>
+                          {rating} ⭐
+                        </span>
+                        <div style={{
+                          flex: 1,
+                          height: '24px',
+                          background: '#e0e0e0',
+                          borderRadius: '12px',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            height: '100%',
+                            width: `${feedbackStats.totalFeedback > 0 ? (feedbackStats.ratingDistribution[rating] / feedbackStats.totalFeedback) * 100 : 0}%`,
+                            background: rating >= 4 ? '#4caf50' : rating === 3 ? '#ff9800' : '#f44336',
+                            transition: 'width 0.3s'
+                          }} />
+                        </div>
+                        <span style={{ width: '50px', textAlign: 'right', fontSize: '0.9rem', fontWeight: '600' }}>
+                          {feedbackStats.ratingDistribution[rating]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Rating Filter */}
+                  <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: '600', marginRight: '10px', lineHeight: '36px' }}>Filter by Rating:</span>
+                    {['all', '5', '4', '3', '2', '1'].map(filter => (
+                      <button
+                        key={filter}
+                        onClick={() => {
+                          setSelectedRatingFilter(filter);
+                          fetchEventFeedback(selectedEventDetails._id);
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '20px',
+                          border: '2px solid',
+                          borderColor: selectedRatingFilter === filter ? '#667eea' : '#ddd',
+                          background: selectedRatingFilter === filter ? '#667eea' : 'white',
+                          color: selectedRatingFilter === filter ? 'white' : '#333',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        {filter === 'all' ? 'All' : `${filter} ⭐`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Feedback List */}
+                  {feedbackList.length > 0 ? (
+                    <div style={{ display: 'grid', gap: '15px' }}>
+                      {feedbackList.map((feedback, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: '20px',
+                            background: 'white',
+                            border: '1px solid #e0e0e0',
+                            borderRadius: '12px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <div>{renderStars(feedback.rating)}</div>
+                            <span style={{ fontSize: '0.85rem', color: '#888' }}>
+                              {new Date(feedback.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          {feedback.comment && (
+                            <p style={{ margin: 0, color: '#555', lineHeight: '1.6', fontSize: '0.95rem' }}>
+                              "{feedback.comment}"
+                            </p>
+                          )}
+                          {!feedback.comment && (
+                            <p style={{ margin: 0, color: '#aaa', fontStyle: 'italic', fontSize: '0.9rem' }}>
+                              No additional comments
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                      <p style={{ fontSize: '2rem', margin: '0 0 15px 0' }}>⭐</p>
+                      <p style={{ fontSize: '1.1rem', margin: '0' }}>
+                        {selectedRatingFilter === 'all' ? 'No feedback submitted yet' : `No ${selectedRatingFilter}-star feedback`}
+                      </p>
+                    </div>
+                  )}
+                </>
               ) : (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-                  <p style={{ fontSize: '2rem', margin: '0 0 15px 0' }}>👤</p>
-                  <p style={{ fontSize: '1.1rem', margin: '0' }}>No participants registered yet</p>
+                  <p style={{ fontSize: '2rem', margin: '0 0 15px 0' }}>⭐</p>
+                  <p style={{ fontSize: '1.1rem', margin: '0' }}>Click "Load Feedback" to view event feedback</p>
                 </div>
               )}
             </div>
-            )}
 
             {/* ===== CUSTOM FORM FIELDS & RESPONSES ===== */}
             {selectedEventDetails.customFields && selectedEventDetails.customFields.length > 0 && (
@@ -2614,8 +2902,8 @@ const OrganizerDashboard = () => {
               <p style={{ margin: '0 0 20px 0', fontSize: '0.9rem', color: '#666' }}>
                 Interact with participants, post announcements, and answer questions in real-time.
               </p>
-              <DiscussionForum 
-                eventId={selectedEventDetails._id} 
+              <DiscussionForum
+                eventId={selectedEventDetails._id}
                 isOrganizer={true}
               />
             </div>

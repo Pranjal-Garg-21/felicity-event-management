@@ -36,6 +36,14 @@ export const API_ENDPOINTS = {
     ALL_ORGANIZERS: `${API_BASE_URL}/api/admin/organizers`,
     ORGANIZER_EVENTS: (id) => `${API_BASE_URL}/api/admin/organizer/${id}/events`,
     DELETE_ORGANIZER: (id) => `${API_BASE_URL}/api/admin/organizer/${id}`
+  },
+  FEEDBACK: {
+    SUBMIT: (eventId) => `${API_BASE_URL}/api/feedback/${eventId}`,
+    GET_EVENT_FEEDBACK: (eventId) => `${API_BASE_URL}/api/feedback/event/${eventId}`,
+    GET_STATS: (eventId) => `${API_BASE_URL}/api/feedback/event/${eventId}/stats`,
+    EXPORT: (eventId) => `${API_BASE_URL}/api/feedback/event/${eventId}/export`,
+    CHECK_SUBMITTED: (eventId) => `${API_BASE_URL}/api/feedback/my-feedback/${eventId}`,
+    CAN_SUBMIT: (eventId) => `${API_BASE_URL}/api/feedback/can-submit/${eventId}`
   }
 };
 

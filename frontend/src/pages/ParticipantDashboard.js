@@ -38,6 +38,15 @@ const ParticipantDashboard = () => {
     memberEmails: ['']
   });
 
+  // Feedback system states
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackEventId, setFeedbackEventId] = useState(null);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [hoveredRating, setHoveredRating] = useState(0);
+  const [submitFeedbackLoading, setSubmitFeedbackLoading] = useState(false);
+  const [submittedFeedback, setSubmittedFeedback] = useState({}); // Track which events have feedback submitted
+
   // Check if onboarding is completed, redirect if not
   useEffect(() => {
     if (user && !user.hasCompletedOnboarding) {
@@ -703,6 +712,83 @@ const ParticipantDashboard = () => {
     }
   };
 
+  // Feedback functions
+  const openFeedbackModal = (event) => {
+    setFeedbackEventId(event._id);
+    setFeedbackRating(0);
+    setFeedbackComment('');
+    setHoveredRating(0);
+    setShowFeedbackModal(true);
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackRating || feedbackRating < 1) {
+      alert('Please select a rating');
+      return;
+    }
+
+    setSubmitFeedbackLoading(true);
+    const config = {
+      headers: { Authorization: `Bearer ${user.token}` }
+    };
+
+    try {
+      await axios.post(
+        `http://localhost:5000/api/feedback/${feedbackEventId}`,
+        { rating: feedbackRating, comment: feedbackComment },
+        config
+      );
+
+      // Mark as submitted
+      setSubmittedFeedback({ ...submittedFeedback, [feedbackEventId]: true });
+
+      // Close modal
+      setShowFeedbackModal(false);
+      setFeedbackRating(0);
+      setFeedbackComment('');
+
+      alert('✅ Thank you for your feedback!');
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      alert(error.response?.data?.message || 'Failed to submit feedback');
+    } finally {
+      setSubmitFeedbackLoading(false);
+    }
+  };
+
+  const renderStars = (rating, isInteractive = false) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      const isFilled = isInteractive
+        ? i <= (hoveredRating || feedbackRating)
+        : i <= rating;
+
+      stars.push(
+        <span
+          key={i}
+          style={{
+            fontSize: '2rem',
+            color: isFilled ? '#ffd700' : '#ddd',
+            cursor: isInteractive ? 'pointer' : 'default',
+            transition: 'color 0.2s',
+            marginRight: '5px'
+          }}
+          onMouseEnter={() => isInteractive && setHoveredRating(i)}
+          onMouseLeave={() => isInteractive && setHoveredRating(0)}
+          onClick={() => isInteractive && setFeedbackRating(i)}
+        >
+          {isFilled ? '⭐' : '☆'}
+        </span>
+      );
+    }
+    return stars;
+  };
+
+  const getRatingEmoji = (rating) => {
+    const emojis = ['', '😢', '😕', '😐', '🙂', '😍'];
+    return emojis[rating] || '';
+  };
+
   const handleNotificationClick = (notification) => {
     if (!notification.read) handleMarkNotificationRead(notification._id);
     if (notification.eventId) {
@@ -1161,6 +1247,36 @@ const ParticipantDashboard = () => {
                           🎟️ {ticket.ticketId}
                         </p>
                       </div>
+                    )}
+                    {/* Show feedback button if event has ended */}
+                    {eventEnded && (
+                      <>
+                        {submittedFeedback[event._id] ? (
+                          <div style={{
+                            ...cardButtonStyle,
+                            background: '#4caf50',
+                            marginTop: '10px',
+                            cursor: 'default',
+                            opacity: 0.8
+                          }}>
+                            ✓ Feedback Submitted
+                          </div>
+                        ) : (
+                          <button
+                            style={{
+                              ...cardButtonStyle,
+                              background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
+                              marginTop: '10px'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openFeedbackModal(event);
+                            }}
+                          >
+                            ⭐ Leave Feedback
+                          </button>
+                        )}
+                      </>
                     )}
                     {/* Only show action buttons if event has NOT ended */}
                     {!eventEnded && (
@@ -1717,6 +1833,104 @@ const ParticipantDashboard = () => {
                   </button>
                 )
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Submission Modal */}
+      {showFeedbackModal && (
+        <div style={modalOverlayStyle} onClick={() => setShowFeedbackModal(false)}>
+          <div style={{ ...modalContentStyle, maxWidth: '550px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={modalHeaderStyle}>
+              <h2 style={modalTitleStyle}>⭐ Share Your Experience</h2>
+              <button
+                onClick={() => setShowFeedbackModal(false)}
+                style={modalCloseButtonStyle}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={modalBodyStyle}>
+              {/* Rating Section */}
+              <div style={{ textAlign: 'center', marginBottom: '25px' }}>
+                <label style={{ display: 'block', fontSize: '1.1rem', fontWeight: '600', marginBottom: '15px', color: '#333' }}>
+                  How would you rate this event?
+                </label>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px' }}>
+                  {renderStars(feedbackRating, true)}
+                </div>
+                {feedbackRating > 0 && (
+                  <div style={{ fontSize: '3rem', marginTop: '10px' }}>
+                    {getRatingEmoji(feedbackRating)}
+                  </div>
+                )}
+                {feedbackRating > 0 && (
+                  <p style={{ fontSize: '0.9rem', color: '#666', marginTop: '10px' }}>
+                    {feedbackRating === 1 && 'We\'re sorry to hear that 😢'}
+                    {feedbackRating === 2 && 'We appreciate your honesty 😕'}
+                    {feedbackRating === 3 && 'Thanks for your feedback 😐'}
+                    {feedbackRating === 4 && 'Great! We\'re glad you enjoyed it 🙂'}
+                    {feedbackRating === 5 && 'Awesome! We\'re thrilled! 😍'}
+                  </p>
+                )}
+              </div>
+
+              {/* Comment Section */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.95rem', fontWeight: '600', marginBottom: '8px', color: '#333' }}>
+                  Additional Comments (Optional)
+                </label>
+                <textarea
+                  value={feedbackComment}
+                  onChange={(e) => setFeedbackComment(e.target.value)}
+                  placeholder="Share your thoughts about the event..."
+                  style={{
+                    width: '100%',
+                    minHeight: '120px',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '2px solid #ddd',
+                    fontSize: '0.95rem',
+                    fontFamily: 'inherit',
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
+                  }}
+                  maxLength={500}
+                />
+                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '5px', textAlign: 'right' }}>
+                  {feedbackComment.length}/500 characters
+                </p>
+              </div>
+
+              {/* Anonymity Notice */}
+              <div style={{
+                background: '#f5f5f5',
+                padding: '12px',
+                borderRadius: '8px',
+                marginTop: '15px',
+                border: '1px solid #ddd'
+              }}>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#666', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.2rem' }}>🔒</span>
+                  <strong>Your feedback is anonymous.</strong> Organizers won't know who submitted this.
+                </p>
+              </div>
+            </div>
+
+            <div style={modalFooterStyle}>
+              <button
+                onClick={handleSubmitFeedback}
+                disabled={submitFeedbackLoading || !feedbackRating}
+                style={{
+                  ...modalRegisterButtonStyle,
+                  opacity: (!feedbackRating || submitFeedbackLoading) ? 0.5 : 1,
+                  cursor: (!feedbackRating || submitFeedbackLoading) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {submitFeedbackLoading ? 'Submitting...' : '✅ Submit Feedback'}
+              </button>
             </div>
           </div>
         </div>
