@@ -11,8 +11,9 @@ const app = express();
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
-  process.env.FRONTEND_URL || 'https://your-frontend-app.vercel.app'
-];
+  process.env.FRONTEND_URL || 'https://your-frontend-app.vercel.app',
+  'https://felicity-event-management.vercel.app' // Add your actual Vercel URL here
+].filter(Boolean);
 
 app.use(cors({
   origin: function(origin, callback) {
