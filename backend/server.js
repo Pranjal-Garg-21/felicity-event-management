@@ -12,14 +12,15 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
   process.env.FRONTEND_URL || 'https://your-frontend-app.vercel.app',
-  'https://felicity-event-management.vercel.app' // Add your actual Vercel URL here
+  'https://felicity-event-management.vercel.app', // Original Vercel URL
+  'https://felicity-event-management-snowy.vercel.app' // Actual deployed Vercel URL
 ].filter(Boolean);
 
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.indexOf(origin) === -1) {
       const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
       return callback(new Error(msg), false);
@@ -39,8 +40,8 @@ mongoose.connect(process.env.MONGO_URI)
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
+  res.status(200).json({
+    status: 'ok',
     message: 'Felicity Backend API is running',
     timestamp: new Date().toISOString()
   });
