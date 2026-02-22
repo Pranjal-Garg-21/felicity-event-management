@@ -2,6 +2,15 @@ const Event = require('../models/Event');
 const User = require('../models/User');
 const { sendEventTicket } = require('../utils/emailService');
 const { sendEventToDiscord } = require('../utils/discordWebhook');
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 exports.createEvent = async (req, res) => {
   try {
@@ -37,8 +46,8 @@ exports.registerForEvent = async (req, res) => {
     console.log('📝 Event ID:', req.params.id);
     console.log('👤 User ID:', req.user.id);
     console.log('👤 User Role:', req.user.role);
-    
-    const event = await Event.findById(req.params.id).populate('organizer', 'organizerName');
+
+    const event = await Event.findById(req.params.id).populate('organizer', 'organizerName category description contactEmail');
     const user = await User.findById(req.user.id);
 
     console.log('📅 Event Found:', event ? event.name : 'NOT FOUND');
@@ -47,13 +56,31 @@ exports.registerForEvent = async (req, res) => {
     if (!event) return res.status(404).json({ message: "Event not found" });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 1. Block if registration limit reached
-    if (event.participants.length >= event.registrationLimit) {
+    // 1. Check Eligibility (IIIT vs Non-IIIT)
+    if (event.eligibility && event.eligibility !== 'Both') {
+      const emailDomain = user.email.toLowerCase().split('@')[1];
+      const isIIIT = emailDomain === 'students.iiit.ac.in' || emailDomain === 'research.iiit.ac.in';
+
+      if (event.eligibility === 'IIIT' && !isIIIT) {
+        return res.status(403).json({
+          message: "This event is exclusive to IIIT students/researchers."
+        });
+      }
+
+      if (event.eligibility === 'Non-IIIT' && isIIIT) {
+        return res.status(403).json({
+          message: "This event is exclusive to Non-IIIT participants."
+        });
+      }
+    }
+
+    // 2. Block if registration limit reached
+    if (event.registrationLimit && event.participants.length >= event.registrationLimit) {
       console.log('❌ Registration limit reached');
       return res.status(400).json({ message: "Registration limit reached!" });
     }
-    
-    // 2. Block if merchandise out of stock
+
+    // 3. Block if merchandise out of stock
     if (event.type === 'Merchandise') {
       const remainingStock = event.merchandiseDetails.stockQuantity - event.soldCount;
       if (remainingStock <= 0) {
@@ -66,7 +93,7 @@ exports.registerForEvent = async (req, res) => {
     const alreadyRegistered = event.participants.some(
       participantId => participantId.toString() === req.user.id.toString()
     );
-    
+
     if (alreadyRegistered) {
       console.log('❌ User already registered');
       return res.status(400).json({ message: "You are already registered for this event" });
@@ -74,36 +101,72 @@ exports.registerForEvent = async (req, res) => {
 
     console.log('✅ Validation passed, adding participant...');
 
-    // 4a. Validate and store custom form responses
-    const customFieldResponses = req.body.formResponses || {};
+    // 4a. Parse and process form responses (supporting file uploads)
+    let customFieldResponses = {};
+
+    // Handle JSON string or object
+    if (req.body.formResponses) {
+      try {
+        customFieldResponses = typeof req.body.formResponses === 'string'
+          ? JSON.parse(req.body.formResponses)
+          : req.body.formResponses;
+      } catch (e) {
+        console.error("Error parsing formResponses:", e);
+        customFieldResponses = {};
+      }
+    }
+
+    // Handle File Uploads
+    if (req.files && req.files.length > 0) {
+      console.log(`📎 Processing ${req.files.length} uploaded files...`);
+      for (const file of req.files) {
+        // Generate unique filename
+        const fileExt = path.extname(file.originalname);
+        const fileName = `${uuidv4()}${fileExt}`;
+        const filePath = path.join(uploadsDir, fileName);
+
+        // Write buffer to disk
+        fs.writeFileSync(filePath, file.buffer);
+
+        // Store relative path (or full URL logic) in responses
+        // Key is the field name from form
+        customFieldResponses[file.fieldname] = `/uploads/${fileName}`;
+        console.log(`✅ Saved file for field '${file.fieldname}': ${fileName}`);
+      }
+    }
+
     if (event.customFields && event.customFields.length > 0) {
       // Validate required fields
       for (const field of event.customFields) {
         if (field.isRequired) {
           const value = customFieldResponses[field.fieldName];
-          if (value === undefined || value === null || value === '') {
-            return res.status(400).json({ 
-              message: `Required field "${field.fieldName}" is missing. Please fill in all required fields.` 
+          // Check for empty string or null/undefined
+          // Note: 0 is valid for number fields
+          if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+            return res.status(400).json({
+              message: `Required field "${field.fieldName}" is missing. Please fill in all required fields.`
             });
           }
         }
       }
-
-      // Store form response
-      const responseEntry = {
-        participantId: req.user.id,
-        participantEmail: user.email,
-        participantName: `${user.firstName} ${user.lastName}`,
-        submittedAt: new Date(),
-        responses: event.customFields.map(field => ({
-          fieldName: field.fieldName,
-          fieldType: field.fieldType,
-          value: customFieldResponses[field.fieldName] ?? ''
-        }))
-      };
-      event.formResponses = event.formResponses || [];
-      event.formResponses.push(responseEntry);
     }
+
+
+    // Store form response
+    const responseEntry = {
+      participantId: req.user.id,
+      participantEmail: user.email,
+      participantName: `${user.firstName} ${user.lastName}`,
+      submittedAt: new Date(),
+      responses: event.customFields.map(field => ({
+        fieldName: field.fieldName,
+        fieldType: field.fieldType,
+        value: customFieldResponses[field.fieldName] ?? ''
+      }))
+    };
+    event.formResponses = event.formResponses || [];
+    event.formResponses.push(responseEntry);
+
 
     // 4b. Lock the form after first registration
     if (!event.formLocked && event.customFields && event.customFields.length > 0) {
@@ -123,13 +186,13 @@ exports.registerForEvent = async (req, res) => {
 
     // 5. Send Email Ticket (for Normal and Merchandise events)
     let ticketInfo = { success: false };
-    
+
     console.log('📧 Checking if email should be sent...');
     console.log('Event type:', event.type);
-    
+
     if (event.type === 'Normal' || event.type === 'Merchandise') {
       console.log('📧 Preparing to send email ticket...');
-      
+
       const eventDataForEmail = {
         name: event.name,
         id: event._id,
@@ -151,7 +214,7 @@ exports.registerForEvent = async (req, res) => {
       console.log('📧 Calling sendEventTicket function...');
       ticketInfo = await sendEventTicket(participantDataForEmail, eventDataForEmail);
       console.log('📧 Email send result:', ticketInfo);
-      
+
       // Always store ticket in user's history (even if email fails)
       console.log('💾 Storing ticket in user profile...');
       user.eventTickets = user.eventTickets || [];
@@ -163,7 +226,7 @@ exports.registerForEvent = async (req, res) => {
       });
       await user.save();
       console.log('✅ Ticket stored in user profile');
-      
+
       if (!ticketInfo.success) {
         console.log('⚠️ Email sending failed but ticket record saved');
         console.log('Error:', ticketInfo.error);
@@ -182,20 +245,20 @@ exports.registerForEvent = async (req, res) => {
     }
 
     // 6. Success Response
-    const responseMessage = event.type === 'Merchandise' 
-      ? `Purchase successful! ${event.merchandiseDetails.stockQuantity - event.soldCount} items remaining.` 
+    const responseMessage = event.type === 'Merchandise'
+      ? `Purchase successful! ${event.merchandiseDetails.stockQuantity - event.soldCount} items remaining.`
       : "Registration successful!";
 
-    const emailNote = ticketInfo.success 
-      ? " 📧 Ticket has been sent to your email!" 
+    const emailNote = ticketInfo.success
+      ? " 📧 Ticket has been sent to your email!"
       : (ticketInfo.error ? " ⚠️ Registration successful but email could not be sent." : "");
 
     console.log('✅ Registration complete, sending response...');
     console.log('🔵 ===== REGISTRATION ENDED =====\n');
-    
+
     // Get the latest ticket stored for this user
     const latestTicket = user.eventTickets[user.eventTickets.length - 1];
-    
+
     res.status(200).json({
       message: responseMessage + emailNote,
       event: {
@@ -210,7 +273,7 @@ exports.registerForEvent = async (req, res) => {
       updatedParticipantCount: event.participants.length,
       updatedSoldCount: event.soldCount || 0
     });
-    
+
   } catch (error) {
     console.error("❌ Registration error:", error);
     console.error("Error details:", error.message);

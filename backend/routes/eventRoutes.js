@@ -34,7 +34,7 @@ router.get('/my-registrations', protect, authorize('Participant'), async (req, r
   try {
     console.log('\n📋 Fetching registered events for user:', req.user.id);
     const events = await Event.find({ participants: req.user.id })
-      .populate('organizer', 'organizerName email')
+      .populate('organizer', 'organizerName email category description contactEmail')
       .sort({ startDate: 1 }); // Sort by upcoming events first
     console.log('✅ Found', events.length, 'registered events');
     res.json(events);
@@ -56,7 +56,7 @@ router.get('/all', protect, async (req, res) => {
     }
 
     const events = await Event.find(query)
-      .populate('organizer', 'organizerName')
+      .populate('organizer', 'organizerName category description contactEmail')
       .select('-formResponses'); // Don't send form responses to participants listing
     res.json(events);
   } catch (error) {
@@ -69,36 +69,36 @@ router.get('/all', protect, async (req, res) => {
 router.get('/:id', protect, async (req, res) => {
   try {
     console.log('🔍 GET /api/events/:id called with ID:', req.params.id);
-    
+
     const event = await Event.findById(req.params.id)
       .populate('organizer', 'organizerName email category')
       .populate('participants', 'firstName lastName email contactNumber college rollNumber branch year eventTickets');
-    
+
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
-    
+
     console.log('📊 Event found:', event.name);
     console.log('👥 Participants count:', event.participants?.length);
-    
+
     // Log first participant's ticket info
     if (event.participants && event.participants.length > 0) {
       const firstP = event.participants[0];
       console.log('🔍 First participant:', firstP.firstName, firstP.lastName);
       console.log('🎫 Their eventTickets:', firstP.eventTickets);
-      
+
       // Check for tickets matching this event
-      const thisEventTickets = firstP.eventTickets?.filter(t => 
+      const thisEventTickets = firstP.eventTickets?.filter(t =>
         t.eventId?.toString() === req.params.id
       );
       console.log('🎫 Tickets for THIS event:', thisEventTickets);
     }
-    
+
     // Check if user is the organizer of this event
     if (req.user.role === 'Organizer' && event.organizer._id.toString() !== req.user.id) {
       return res.status(403).json({ message: "Not authorized to view this event's details" });
     }
-    
+
     res.json(event);
   } catch (error) {
     console.error("Error fetching event details:", error);
@@ -106,9 +106,10 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-router.post('/register/:id', protect, async (req, res) => {
-    // You can call the controller function here
-    require('../controllers/eventController').registerForEvent(req, res);
+// Register for an Event (Individual or Purchase) - Now supports file uploads
+router.post('/register/:id', protect, upload.any(), async (req, res) => {
+  // You can call the controller function here
+  require('../controllers/eventController').registerForEvent(req, res);
 });
 
 // Unregister from an event (only for free events before deadline)
@@ -144,8 +145,8 @@ router.post('/unregister/:id', protect, authorize('Participant'), async (req, re
       );
 
       if (!pocTeam) {
-        return res.status(400).json({ 
-          message: "Only the Point of Contact (POC) who registered the team can unregister. Contact your team POC." 
+        return res.status(400).json({
+          message: "Only the Point of Contact (POC) who registered the team can unregister. Contact your team POC."
         });
       }
 
@@ -190,8 +191,8 @@ router.post('/unregister/:id', protect, authorize('Participant'), async (req, re
       await event.save();
       console.log(`💾 Team "${pocTeam.teamName}" unregistered. Remaining participants: ${event.participants.length}`);
 
-      return res.status(200).json({ 
-        message: `Team "${pocTeam.teamName}" has been unregistered. All ${matchedUsers.length} team members have been removed from this event.` 
+      return res.status(200).json({
+        message: `Team "${pocTeam.teamName}" has been unregistered. All ${matchedUsers.length} team members have been removed from this event.`
       });
     }
 
@@ -217,8 +218,8 @@ router.post('/unregister/:id', protect, authorize('Participant'), async (req, re
 
     console.log(`✅ User ${userId} unregistered from event ${event.name}. Remaining participants: ${event.participants.length}`);
 
-    res.status(200).json({ 
-      message: `Successfully unregistered from "${event.name}".` 
+    res.status(200).json({
+      message: `Successfully unregistered from "${event.name}".`
     });
 
   } catch (error) {
@@ -231,7 +232,7 @@ router.post('/unregister/:id', protect, authorize('Participant'), async (req, re
 router.post('/register-team/:id', protect, authorize('Participant'), async (req, res) => {
   try {
     const event = await Event.findById(req.params.id).populate('organizer', 'organizerName');
-    
+
     if (!event) {
       return res.status(404).json({ message: "Event not found" });
     }
@@ -248,13 +249,37 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
 
     // Check if registration limit reached
     const currentTeams = event.teamRegistrations?.length || 0;
-    if (currentTeams >= event.registrationLimit) {
+    if (event.registrationLimit && currentTeams >= event.registrationLimit) {
       return res.status(400).json({ message: "Registration limit reached" });
     }
 
     // Validate team data
     const { teamName, pocName, pocEmail, members, totalFee } = req.body;
-    
+
+    // Check Eligibility for ALL Team Members
+    if (event.eligibility && event.eligibility !== 'Both') {
+      const allEmails = [pocEmail, ...members.map(m => m.email)];
+      const invalidEmails = [];
+
+      allEmails.forEach(email => {
+        if (!email) return;
+        const emailDomain = email.toLowerCase().split('@')[1];
+        const isIIIT = emailDomain === 'students.iiit.ac.in' || emailDomain === 'research.iiit.ac.in';
+
+        if (event.eligibility === 'IIIT' && !isIIIT) {
+          invalidEmails.push(email);
+        } else if (event.eligibility === 'Non-IIIT' && isIIIT) {
+          invalidEmails.push(email);
+        }
+      });
+
+      if (invalidEmails.length > 0) {
+        return res.status(403).json({
+          message: `Eligibility failed! The following emails are not allowed for ${event.eligibility} events: ${invalidEmails.join(', ')}`
+        });
+      }
+    }
+
     if (!teamName || !pocName || !pocEmail || !members || members.length === 0) {
       return res.status(400).json({ message: "All team fields are required" });
     }
@@ -262,15 +287,15 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
     // Validate team size
     const minSize = event.teamDetails?.minTeamSize || 2;
     const maxSize = event.teamDetails?.maxTeamSize || 4;
-    
+
     if (members.length < minSize || members.length > maxSize) {
-      return res.status(400).json({ 
-        message: `Team size must be between ${minSize} and ${maxSize} members` 
+      return res.status(400).json({
+        message: `Team size must be between ${minSize} and ${maxSize} members`
       });
     }
 
-    // Generate a shared team ticket ID
-    const teamTicketId = `TEAM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    // Generate a shared team ticket ID - REMOVED for unique tickets
+    // const teamTicketId = `TEAM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
     // Validate and store custom form responses for team registration
     const customFieldResponses = req.body.formResponses || {};
@@ -279,8 +304,8 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
         if (field.isRequired) {
           const value = customFieldResponses[field.fieldName];
           if (value === undefined || value === null || value === '') {
-            return res.status(400).json({ 
-              message: `Required field "${field.fieldName}" is missing.` 
+            return res.status(400).json({
+              message: `Required field "${field.fieldName}" is missing.`
             });
           }
         }
@@ -321,16 +346,19 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
     // Look up ALL team member emails to find registered users
     if (!event.participants) event.participants = [];
     const allMemberEmails = members.map(m => m.email.toLowerCase());
-    
+
     // Also include the registering user
     const registeringUser = await User.findById(req.user.id);
     if (registeringUser && !allMemberEmails.includes(registeringUser.email.toLowerCase())) {
       allMemberEmails.push(registeringUser.email.toLowerCase());
     }
-    
+
     // Find all users whose emails match any team member email
     const matchedUsers = await User.find({ email: { $in: allMemberEmails } });
     console.log(`👥 Found ${matchedUsers.length} registered users out of ${allMemberEmails.length} team member emails`);
+
+    // Map to store email -> ticketId for email sending
+    const emailToTicketMap = {};
 
     // Add ALL matched users to event.participants + store ticket in their profile
     for (const memberUser of matchedUsers) {
@@ -345,19 +373,31 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
 
       // Store ticket record in member's profile
       memberUser.eventTickets = memberUser.eventTickets || [];
-      const alreadyHasTicket = memberUser.eventTickets.some(
+      const existingTicket = memberUser.eventTickets.find(
         t => t.eventId && t.eventId.toString() === event._id.toString()
       );
-      if (!alreadyHasTicket) {
+
+      let thisUserTicketId;
+
+      if (!existingTicket) {
+        // Generate UNIQUE ticket ID for this member
+        thisUserTicketId = `TICKET-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
         memberUser.eventTickets.push({
           eventId: event._id,
-          ticketId: teamTicketId,
+          ticketId: thisUserTicketId,
           registeredAt: new Date(),
           emailSent: false
         });
         await memberUser.save();
-        console.log(`✅ Stored ticket in profile for ${memberUser.email}`);
+        console.log(`✅ Stored ticket in profile for ${memberUser.email} (ID: ${thisUserTicketId})`);
+      } else {
+        thisUserTicketId = existingTicket.ticketId;
+        console.log(`ℹ️ User ${memberUser.email} already has ticket: ${thisUserTicketId}`);
       }
+
+      // Store in map for emails
+      emailToTicketMap[memberUser.email.toLowerCase()] = thisUserTicketId;
     }
 
     // Also ensure the registering user (form submitter) is added even if their email wasn't in the members list
@@ -368,18 +408,25 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
       event.participants.push(req.user.id);
     }
     if (registeringUser) {
-      const submitterHasTicket = (registeringUser.eventTickets || []).some(
+      const submitterHasTicket = (registeringUser.eventTickets || []).find(
         t => t.eventId && t.eventId.toString() === event._id.toString()
       );
+
       if (!submitterHasTicket) {
+        const submitterTicketId = `TICKET-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+
         registeringUser.eventTickets = registeringUser.eventTickets || [];
         registeringUser.eventTickets.push({
           eventId: event._id,
-          ticketId: teamTicketId,
+          ticketId: submitterTicketId,
           registeredAt: new Date(),
           emailSent: false
         });
         await registeringUser.save();
+
+        emailToTicketMap[registeringUser.email.toLowerCase()] = submitterTicketId;
+      } else if (!emailToTicketMap[registeringUser.email.toLowerCase()]) {
+        emailToTicketMap[registeringUser.email.toLowerCase()] = submitterHasTicket.ticketId;
       }
     }
 
@@ -390,11 +437,17 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
     // ===== SEND EMAILS TO ALL MEMBERS =====
     let emailResult = { success: false };
     try {
+      // Attach ticket IDs to members for email service
+      const membersWithTickets = members.map(m => ({
+        ...m,
+        ticketId: emailToTicketMap[m.email.toLowerCase()] || `PENDING-REGISTRATION-${Date.now()}` // Fallback if user not registered yet
+      }));
+
       const teamDataForEmail = {
         teamName,
         pocName,
         pocEmail,
-        members,
+        members: membersWithTickets,
         totalFee: totalFee || (members.length * event.registrationFee)
       };
 
@@ -425,7 +478,7 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
                 );
                 if (ticket) {
                   ticket.emailSent = true;
-                  ticket.ticketId = emailResult.ticketId || teamTicketId;
+                  // ticket.ticketId is already set correctly
                   await sentUser.save();
                 }
               }
@@ -439,9 +492,9 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
       console.error('❌ Error sending team emails:', emailErr);
     }
 
-    const emailNote = emailResult.success 
+    const emailNote = emailResult.success
       ? ` 📧 Tickets sent to all ${emailResult.sentCount} team members!`
-      : emailResult.partial 
+      : emailResult.partial
         ? ` ⚠️ Tickets sent to ${emailResult.sentCount}/${emailResult.totalMembers} members.`
         : (emailResult.error ? ' ⚠️ Registration successful but emails could not be sent.' : '');
 
@@ -450,7 +503,7 @@ router.post('/register-team/:id', protect, authorize('Participant'), async (req,
       teamName,
       totalFee: totalFee || (members.length * event.registrationFee),
       ticket: {
-        ticketId: emailResult.ticketId || teamTicketId,
+        ticketId: emailToTicketMap[pocEmail.toLowerCase()] || 'CHECK-EMAIL',
         emailsSent: emailResult.sentCount || 0,
         totalMembers: members.length
       }
@@ -469,17 +522,17 @@ router.post('/scan-qr', protect, authorize('Organizer'), upload.single('image'),
 
     const buffer = req.file.buffer;
     const image = await Jimp.read(buffer);
-    
+
     // jsQR expects raw RGBA pixel data
     const { width, height } = image.bitmap;
     const imageData = new Uint8ClampedArray(image.bitmap.data);
-    
+
     const code = jsQR(imageData, width, height);
 
     if (!code || !code.data) {
       return res.status(400).json({ message: 'No QR code found in image' });
     }
-    
+
     let payload;
     try { payload = JSON.parse(code.data); } catch (e) { payload = code.data; }
     res.json({ success: true, payload });
@@ -517,9 +570,9 @@ router.post('/verify-ticket/:eventId', protect, authorize('Organizer'), async (r
     }).select('firstName lastName email contactNumber participantType collegeName eventTickets');
 
     if (!user) {
-      return res.status(404).json({ 
-        verified: false, 
-        message: '❌ Invalid ticket! No matching registration found for this event.' 
+      return res.status(404).json({
+        verified: false,
+        message: '❌ Invalid ticket! No matching registration found for this event.'
       });
     }
 
@@ -566,7 +619,7 @@ router.get('/:id/form-responses', protect, authorize('Organizer'), async (req, r
   try {
     const event = await Event.findById(req.params.id)
       .select('name customFields formResponses formLocked organizer');
-    
+
     if (!event) return res.status(404).json({ message: 'Event not found' });
     if (event.organizer.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized' });
@@ -582,6 +635,74 @@ router.get('/:id/form-responses', protect, authorize('Organizer'), async (req, r
   } catch (err) {
     console.error('Error fetching form responses:', err);
     res.status(500).json({ message: 'Error fetching form responses' });
+  }
+});
+
+// Cancel Event (Organizer only, unpaid, >2 days before)
+// Cancel Event (Organizer only, unpaid, >2 days before)
+router.post('/cancel/:id', protect, authorize('Organizer'), async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id)
+      .populate('participants', 'firstName lastName email')
+      .populate('organizer', 'organizerName email');
+
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    // Check ownership
+    if (event.organizer._id.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized to cancel this event" });
+    }
+
+    // 1. Check status
+    if (event.status === 'Cancelled' || event.status === 'Completed') {
+      return res.status(400).json({ message: "Event is already cancelled or completed." });
+    }
+
+    // 2. Check if paid
+    if (event.registrationFee > 0) {
+      return res.status(400).json({ message: "Cannot cancel paid events via dashboard. Please contact admin for refunds." });
+    }
+
+    // 3. Check 48 hour rule
+    const now = new Date();
+    const eventDate = new Date(event.startDate);
+    const timeDiff = eventDate - now;
+    const hoursDiff = timeDiff / (1000 * 3600);
+
+    if (hoursDiff < 48) {
+      return res.status(400).json({ message: "Cannot cancel event within 48 hours of start time." });
+    }
+
+    // Update status
+    event.status = 'Cancelled';
+    await event.save();
+
+    console.log(`🚫 Event "${event.name}" cancelled by organizer.`);
+
+    // Notify all participants
+    if (event.participants && event.participants.length > 0) {
+      console.log(`📧 Sending cancellation emails to ${event.participants.length} participants...`);
+
+      const { sendEventCancellationEmail } = require('../utils/emailService');
+
+      // Send emails in parallel
+      const emailPromises = event.participants.map(async (participant) => {
+        return sendEventCancellationEmail(event, participant.email, participant.firstName);
+      });
+
+      // Wait for all emails to be attempting (don't block response too long if many)
+      // For large lists, this should be a background job
+      Promise.allSettled(emailPromises).then(results => {
+        const sentCount = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+        console.log(`✅ Cancellation emails sent: ${sentCount}/${event.participants.length}`);
+      });
+    }
+
+    res.json({ message: "Event cancelled successfully. Participants will be notified via email." });
+
+  } catch (error) {
+    console.error("Error cancelling event:", error);
+    res.status(500).json({ message: "Error cancelling event" });
   }
 });
 
@@ -690,8 +811,8 @@ router.put('/:id', protect, authorize('Organizer'), async (req, res) => {
         try {
           console.log('📢 Posting event to Discord...');
           const discordResult = await sendEventToDiscord(
-            organizer.discordWebhook, 
-            updatedEvent, 
+            organizer.discordWebhook,
+            updatedEvent,
             organizer.organizerName
           );
           if (discordResult.success) {

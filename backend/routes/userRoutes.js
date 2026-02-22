@@ -105,7 +105,7 @@ router.post('/follow/:id', protect, async (req, res) => {
 
     await organizer.save();
     await student.save();
-    
+
     // Return the updated followers list for frontend state sync
     res.json({ followers: organizer.followers });
   } catch (err) {
@@ -117,29 +117,29 @@ router.post('/follow/:id', protect, async (req, res) => {
 router.put('/update-onboarding', protect, async (req, res) => {
   try {
     const { interests, followedClubs, hasCompletedOnboarding } = req.body;
-    
+
     // Get current user to check previous followedClubs
     const currentUser = await User.findById(req.user.id);
     const previousClubs = currentUser.followedClubs || [];
     const newClubs = followedClubs || [];
-    
+
     // Update user with interests and onboarding status
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      { 
-        interests: interests || [], 
+      {
+        interests: interests || [],
         followedClubs: newClubs,
-        hasCompletedOnboarding: hasCompletedOnboarding 
+        hasCompletedOnboarding: hasCompletedOnboarding
       },
       { new: true }
     ).select('-password').populate('followedClubs', 'organizerName category description');
 
     // Find clubs to add (in new but not in previous)
     const clubsToAdd = newClubs.filter(id => !previousClubs.some(prevId => prevId.toString() === id.toString()));
-    
+
     // Find clubs to remove (in previous but not in new)
     const clubsToRemove = previousClubs.filter(prevId => !newClubs.some(id => id.toString() === prevId.toString()));
-    
+
     // Add user to followers list of newly followed clubs
     if (clubsToAdd.length > 0) {
       await Promise.all(
@@ -152,7 +152,7 @@ router.put('/update-onboarding', protect, async (req, res) => {
         })
       );
     }
-    
+
     // Remove user from followers list of unfollowed clubs
     if (clubsToRemove.length > 0) {
       await Promise.all(
@@ -179,7 +179,7 @@ router.get('/my-tickets', protect, async (req, res) => {
     const user = await User.findById(req.user.id)
       .populate({
         path: 'eventTickets.eventId',
-        select: 'name type startDate endDate venue organizer registrationFee',
+        select: 'name type startDate endDate venue organizer registrationFee teamRegistrations',
         populate: {
           path: 'organizer',
           select: 'organizerName'
@@ -195,8 +195,29 @@ router.get('/my-tickets', protect, async (req, res) => {
       return res.json([]);
     }
 
-    // Filter out any tickets where event was deleted
-    const validTickets = user.eventTickets.filter(ticket => ticket.eventId !== null);
+    // Filter out tickets for deleted events and map to plain objects
+    const validTickets = user.eventTickets
+      .filter(ticket => ticket.eventId !== null)
+      .map(ticket => ticket.toObject());
+
+    // Enrich tickets with Team Name if applicable
+    for (const ticket of validTickets) {
+      const event = ticket.eventId;
+      if (event && event.type === 'Team' && event.teamRegistrations) {
+        // Find the team this user is a member of
+        const userTeam = event.teamRegistrations.find(team =>
+          team.members.some(member => member.email.toLowerCase() === user.email.toLowerCase()) ||
+          team.teamLeaderEmail.toLowerCase() === user.email.toLowerCase()
+        );
+
+        if (userTeam) {
+          ticket.teamName = userTeam.teamName;
+        }
+
+        // Remove teamRegistrations from response to reduce payload size
+        delete ticket.eventId.teamRegistrations;
+      }
+    }
 
     res.json(validTickets);
   } catch (err) {
@@ -211,16 +232,16 @@ router.get('/my-tickets', protect, async (req, res) => {
 router.get('/notifications', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('notifications');
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
     // Sort by createdAt descending (newest first)
-    const sortedNotifications = user.notifications.sort((a, b) => 
+    const sortedNotifications = user.notifications.sort((a, b) =>
       new Date(b.createdAt) - new Date(a.createdAt)
     );
-    
+
     res.json(sortedNotifications);
   } catch (err) {
     console.error('Error fetching notifications:', err);
@@ -234,20 +255,20 @@ router.get('/notifications', protect, async (req, res) => {
 router.put('/notifications/:notificationId/read', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
     const notification = user.notifications.id(req.params.notificationId);
-    
+
     if (!notification) {
       return res.status(404).json({ message: 'Notification not found' });
     }
-    
+
     notification.read = true;
     await user.save();
-    
+
     res.json({ message: 'Notification marked as read' });
   } catch (err) {
     console.error('Error marking notification as read:', err);
@@ -261,17 +282,17 @@ router.put('/notifications/:notificationId/read', protect, async (req, res) => {
 router.delete('/notifications/:notificationId', protect, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    
+
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
+
     user.notifications = user.notifications.filter(
       n => n._id.toString() !== req.params.notificationId
     );
-    
+
     await user.save();
-    
+
     res.json({ message: 'Notification deleted' });
   } catch (err) {
     console.error('Error deleting notification:', err);

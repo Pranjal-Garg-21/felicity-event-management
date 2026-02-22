@@ -12,13 +12,18 @@ const AdminDashboard = () => {
   const [selectedOrganizer, setSelectedOrganizer] = useState(null); // For viewing specific organizer's events
   const [formData, setFormData] = useState({
     organizerName: '',
-    email: '',
-    password: '',
+    // email is auto-generated
+    manualPassword: '',
     category: '',
     description: '',
     contactNumber: '',
     discordWebhook: ''
   });
+  const [useManualPassword, setUseManualPassword] = useState(false);
+
+  // Modal states for credentials display
+  const [newCredentials, setNewCredentials] = useState(null);
+  const [resetCredentials, setResetCredentials] = useState(null);
 
   // Security monitoring state
   const [securityEvents, setSecurityEvents] = useState([]);
@@ -154,8 +159,18 @@ const AdminDashboard = () => {
   const handleResetAction = async (userId, action) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post('http://localhost:5000/api/admin/handle-reset', { userId, action }, config);
-      alert(`Request ${action}ed!`);
+      const { data } = await axios.post('http://localhost:5000/api/admin/handle-reset', { userId, action }, config);
+
+      if (action === 'approve' && data.generatedPassword) {
+        setResetCredentials({
+          clubName: data.clubName,
+          email: data.email,
+          password: data.generatedPassword
+        });
+      } else {
+        alert(`Request ${action}ed!`);
+      }
+
       fetchResetRequests();
       fetchOrganizers();
     } catch (err) {
@@ -167,9 +182,33 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post('http://localhost:5000/api/admin/create-organizer', formData, config);
-      alert("✅ Organizer Account Created!");
-      setFormData({ organizerName: '', email: '', password: '', category: '', description: '', contactNumber: '', discordWebhook: '' });
+
+      const payload = {
+        organizerName: formData.organizerName,
+        category: formData.category,
+        description: formData.description,
+        orgContactNumber: formData.contactNumber,
+        discordWebhook: formData.discordWebhook,
+        manualPassword: useManualPassword ? formData.manualPassword : null
+      };
+
+      const { data } = await axios.post('http://localhost:5000/api/admin/create-organizer', payload, config);
+
+      // Show credentials modal
+      setNewCredentials({
+        name: data.organizer.name,
+        email: data.organizer.email,
+        password: data.organizer.password
+      });
+
+      setFormData({
+        organizerName: '',
+        manualPassword: '',
+        category: '',
+        description: '',
+        contactNumber: '',
+        discordWebhook: ''
+      });
       fetchOrganizers();
     } catch (err) {
       alert(err.response?.data?.message || "Error creating organizer");
@@ -231,28 +270,44 @@ const AdminDashboard = () => {
           <form onSubmit={handleSubmit} style={formStyle}>
             <input
               type="text"
-              placeholder="Club Name"
+              placeholder="Club Name (e.g. ArtSoc)"
               value={formData.organizerName}
               onChange={(e) => setFormData({ ...formData, organizerName: e.target.value })}
               required
               style={inputStyle}
             />
-            <input
-              type="email"
-              placeholder="Login Email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
-              style={inputStyle}
-            />
-            <input
-              type="password"
-              placeholder="Temporary Password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              required
-              style={inputStyle}
-            />
+
+            <div style={{ padding: '10px', background: '#f5f5f5', borderRadius: '8px', fontSize: '0.9rem' }}>
+              <strong>Generated Email: </strong>
+              <span style={{ fontFamily: 'monospace', color: '#667eea' }}>
+                {formData.organizerName ? `${formData.organizerName.toLowerCase().replace(/[^a-z0-9]/g, '')}@clubs.iiit.ac.in` : '(enters automatically)'}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem' }}>
+              <input
+                type="checkbox"
+                id="manualPass"
+                checked={useManualPassword}
+                onChange={(e) => setUseManualPassword(e.target.checked)}
+              />
+              <label htmlFor="manualPass">Set Password Manually</label>
+            </div>
+
+            {useManualPassword ? (
+              <input
+                type="text" // Visible text so admin can see what they type to share verbally
+                placeholder="Enter Password"
+                value={formData.manualPassword}
+                onChange={(e) => setFormData({ ...formData, manualPassword: e.target.value })}
+                required
+                style={inputStyle}
+              />
+            ) : (
+              <div style={{ padding: '10px', background: '#e8f5e9', borderRadius: '8px', fontSize: '0.9rem', color: '#2e7d32' }}>
+                🔒 A secure random password will be generated.
+              </div>
+            )}
             <input
               type="text"
               placeholder="Category"
@@ -757,9 +812,86 @@ const AdminDashboard = () => {
           )}
         </section>
       </div>
+      {/* Credentials Modal (Created) */}
+      {newCredentials && (
+        <div style={modalOverlayStyle}>
+          <div style={modalContentStyle}>
+            <h3 style={{ color: '#2e7d32', marginTop: 0 }}>✅ Account Created Successfully!</h3>
+            <p>Please share these credentials with the organizer immediately.</p>
+
+            <div style={credentialBoxStyle}>
+              <div style={credentialRowStyle}>
+                <span style={labelStyle}>Club Name:</span>
+                <span style={valueStyle}>{newCredentials.name}</span>
+              </div>
+              <div style={credentialRowStyle}>
+                <span style={labelStyle}>Login Email:</span>
+                <span style={{ ...valueStyle, color: '#1976d2' }}>{newCredentials.email}</span>
+              </div>
+              <div style={credentialRowStyle}>
+                <span style={labelStyle}>Password:</span>
+                <span style={{ ...valueStyle, fontFamily: 'monospace', background: '#fff3e0', padding: '2px 6px', borderRadius: '4px' }}>
+                  {newCredentials.password}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', textAlign: 'right' }}>
+              <button
+                onClick={() => setNewCredentials(null)}
+                style={closeModalButtonStyle}
+              >
+                Done (I have copied it)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Credentials Modal (Reset) */}
+      {resetCredentials && (
+        <div style={modalOverlayStyle}>
+          <div style={modalContentStyle}>
+            <h3 style={{ color: '#f57c00', marginTop: 0 }}>🔐 Password Reset Approved</h3>
+            <p>The password for <strong>{resetCredentials.clubName}</strong> has been reset.</p>
+            <p>Please share the new password with the organizer:</p>
+
+            <div style={credentialBoxStyle}>
+              <div style={credentialRowStyle}>
+                <span style={labelStyle}>Login Email:</span>
+                <span style={valueStyle}>{resetCredentials.email}</span>
+              </div>
+              <div style={credentialRowStyle}>
+                <span style={labelStyle}>New Password:</span>
+                <span style={{ ...valueStyle, fontFamily: 'monospace', background: '#fff3e0', padding: '2px 6px', borderRadius: '4px', fontSize: '1.2rem' }}>
+                  {resetCredentials.password}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: '20px', textAlign: 'right' }}>
+              <button
+                onClick={() => setResetCredentials(null)}
+                style={closeModalButtonStyle}
+              >
+                Done (I have copied it)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+// Additional Styles
+const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 };
+const modalContentStyle = { background: 'white', padding: '30px', borderRadius: '12px', maxWidth: '500px', width: '90%', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' };
+const credentialBoxStyle = { background: '#f5f5f5', padding: '20px', borderRadius: '8px', marginTop: '15px', border: '1px solid #ddd' };
+const credentialRowStyle = { display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' };
+const labelStyle = { fontWeight: '600', color: '#666' };
+const valueStyle = { fontWeight: 'bold', color: '#333' };
+const closeModalButtonStyle = { padding: '10px 20px', background: '#333', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 
 const containerStyle = {
   minHeight: '100vh',

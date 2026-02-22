@@ -17,36 +17,36 @@ const Onboarding = () => {
   useEffect(() => {
     const fetchData = async () => {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      
+
       // Fetch all organizers
       const organizersRes = await axios.get('http://localhost:5000/api/users/organizers', config);
       setOrganizers(organizersRes.data);
-      
+
       // Fetch user's profile to get existing interests and followed clubs
       const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
-      
+
       console.log('User profile data:', profileRes.data);
       console.log('Followed clubs from profile:', profileRes.data.followedClubs);
-      
+
       // Set existing interests and followed clubs
       if (profileRes.data.interests) {
         setSelectedInterests(profileRes.data.interests);
       }
       if (profileRes.data.followedClubs) {
         // Extract just the IDs from populated clubs
-        const clubIds = profileRes.data.followedClubs.map(club => 
+        const clubIds = profileRes.data.followedClubs.map(club =>
           typeof club === 'string' ? club : club._id
         );
         console.log('Extracted club IDs:', clubIds);
         setFollowedClubs(clubIds);
       }
     };
-    
+
     fetchData();
   }, [user]);
 
   const handleToggleInterest = (interest) => {
-    setSelectedInterests(prev => 
+    setSelectedInterests(prev =>
       prev.includes(interest) ? prev.filter(i => i !== interest) : [...prev, interest]
     );
   };
@@ -65,22 +65,22 @@ const Onboarding = () => {
         followedClubs,
         hasCompletedOnboarding: true
       }, config);
-      
+
       console.log('Onboarding update response:', data);
-      
+
       // Extract club IDs for context
-      const clubIds = data.followedClubs?.map(club => 
+      const clubIds = data.followedClubs?.map(club =>
         typeof club === 'string' ? club : club._id
       ) || [];
-      
+
       // Update local storage/context with new user data
-      login({ 
-        ...user, 
-        hasCompletedOnboarding: true, 
-        interests: data.interests, 
-        followedClubs: clubIds 
+      login({
+        ...user,
+        hasCompletedOnboarding: true,
+        interests: data.interests,
+        followedClubs: clubIds
       });
-      
+
       navigate('/dashboard');
     } catch (err) {
       console.error("Onboarding failed", err);
@@ -95,7 +95,7 @@ const Onboarding = () => {
         followedClubs: [],
         hasCompletedOnboarding: true
       }, config);
-      
+
       // Update local storage/context to mark onboarding as complete
       login({ ...user, hasCompletedOnboarding: true });
       navigate('/dashboard');
@@ -109,14 +109,14 @@ const Onboarding = () => {
 
   return (
     <div style={onboardingContainerStyle}>
-      <h2>Welcome to Felicity! 🎡</h2>
-      <p>Personalize your experience (or skip and do it later)</p>
-      
+      <h2>{user?.hasCompletedOnboarding ? "Update Your Preferences ⚙️" : "Welcome to Felicity! 🎡"}</h2>
+      <p>{user?.hasCompletedOnboarding ? "Manage your interests and followed clubs" : "Personalize your experience (or skip and do it later)"}</p>
+
       <h3>1. Select Interests</h3>
       <div style={tagContainerStyle}>
         {interestOptions.map(opt => (
-          <button 
-            key={opt} 
+          <button
+            key={opt}
             onClick={() => handleToggleInterest(opt)}
             style={selectedInterests.includes(opt) ? activeTagStyle : tagStyle}
           >
@@ -131,7 +131,7 @@ const Onboarding = () => {
           <div key={org._id} style={clubCardStyle}>
             <h4 style={{ margin: '0 0 10px 0' }}>{org.organizerName}</h4>
             <p style={{ fontSize: '0.9rem', margin: '5px 0', opacity: 0.8 }}>{org.category}</p>
-            <button 
+            <button
               onClick={() => handleToggleClub(org._id)}
               style={followedClubs.includes(org._id) ? activeFollowButtonStyle : followButtonStyle}
             >
@@ -141,8 +141,17 @@ const Onboarding = () => {
         ))}
       </div>
 
-      <button onClick={handleFinish} style={finishButtonStyle}>Finish & Explore</button>
-      <button onClick={handleSkip} style={skipButtonStyle}>Skip for now</button>
+      <button onClick={handleFinish} style={finishButtonStyle}>
+        {user?.hasCompletedOnboarding ? "Save Changes" : "Finish & Explore"}
+      </button>
+
+      {!user?.hasCompletedOnboarding && (
+        <button onClick={handleSkip} style={skipButtonStyle}>Skip for now</button>
+      )}
+
+      {user?.hasCompletedOnboarding && (
+        <button onClick={() => navigate('/dashboard')} style={skipButtonStyle}>Cancel</button>
+      )}
     </div>
   );
 };

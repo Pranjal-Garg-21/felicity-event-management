@@ -24,7 +24,10 @@ const OrganizerDashboard = () => {
     description: '',
     contactNumber: '',
     contactEmail: '',
-    discordWebhook: ''
+    discordWebhook: '',
+    resetReason: '',
+    resetStatus: null, // "Pending", "Approved", "Rejected", or null
+    resetRequestedAt: null
   });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
@@ -58,7 +61,13 @@ const OrganizerDashboard = () => {
     tags: '',
     // Team event specific
     minTeamSize: '',
-    maxTeamSize: ''
+    maxTeamSize: '',
+    // Merchandise specific
+    merchandiseDetails: {
+      stockQuantity: '',
+      purchaseLimitPerUser: 1,
+      itemVariants: [] // Array of { variantName, size, color }
+    }
   });
 
   // Event Sessions (multiple dates/times)
@@ -102,7 +111,9 @@ const OrganizerDashboard = () => {
           description: profileRes.data.description || '',
           contactNumber: profileRes.data.contactNumber || '',
           contactEmail: profileRes.data.contactEmail || '',
-          discordWebhook: profileRes.data.discordWebhook || ''
+          discordWebhook: profileRes.data.discordWebhook || '',
+          resetStatus: profileRes.data.resetRequest?.status || null,
+          resetRequestedAt: profileRes.data.resetRequest?.requestedAt || null
         });
       } catch (err) {
         console.error("Dashboard fetch error:", err);
@@ -432,6 +443,25 @@ const OrganizerDashboard = () => {
     } catch (err) {
       console.error(err);
       alert(err.response?.data?.message || "Error publishing event. Please try again.");
+    }
+  };
+
+  // Handle Cancelling an Event
+  const handleCancelEvent = async (eventId) => {
+    const confirmed = window.confirm("Are you SURE you want to cancel this event?\n\nThis action cannot be undone. All participants will be notified.");
+    if (!confirmed) return;
+
+    try {
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      await axios.post(`http://localhost:5000/api/events/cancel/${eventId}`, {}, config);
+
+      alert("✅ Event has been cancelled successfully.");
+
+      // Refresh details
+      await fetchEventDetails(eventId);
+    } catch (err) {
+      console.error("Error cancelling event:", err);
+      alert(err.response?.data?.message || "Could not cancel event");
     }
   };
 
@@ -849,6 +879,20 @@ const OrganizerDashboard = () => {
         };
       }
 
+      // For Merchandise events, validate and set details
+      if (formData.type === 'Merchandise') {
+        const details = formData.merchandiseDetails;
+        if (!details.stockQuantity || !details.purchaseLimitPerUser) {
+          alert('Merchandise events require Stock Quantity and Purchase Limit.');
+          return;
+        }
+        eventData.merchandiseDetails = {
+          stockQuantity: parseInt(details.stockQuantity),
+          purchaseLimitPerUser: parseInt(details.purchaseLimitPerUser),
+          itemVariants: details.itemVariants
+        };
+      }
+
       await axios.post('http://localhost:5000/api/events', eventData, config);
 
       alert(status === 'Draft' ? "💾 Event Saved as Draft!" : "🎉 Event Published Successfully!");
@@ -865,7 +909,12 @@ const OrganizerDashboard = () => {
         venue: '',
         tags: '',
         minTeamSize: '',
-        maxTeamSize: ''
+        maxTeamSize: '',
+        merchandiseDetails: {
+          stockQuantity: '',
+          purchaseLimitPerUser: 1,
+          itemVariants: []
+        }
       });
       setEventSessions([{ sessionName: '', startDate: '', startTime: '', endDate: '', endTime: '', venue: '' }]);
       setCustomFields([]);
@@ -900,10 +949,39 @@ const OrganizerDashboard = () => {
         description: profileRes.data.description || '',
         contactNumber: profileRes.data.contactNumber || '',
         contactEmail: profileRes.data.contactEmail || '',
-        discordWebhook: profileRes.data.discordWebhook || ''
+        discordWebhook: profileRes.data.discordWebhook || '',
+        resetStatus: profileRes.data.resetRequest?.status || null,
+        resetRequestedAt: profileRes.data.resetRequest?.requestedAt || null
       });
     } catch (err) {
       alert('❌ Error updating profile: ' + (err.response?.data?.message || 'Unknown error'));
+    }
+  };
+
+  // Handle Password Reset Request
+  const handleResetRequest = async () => {
+    if (!profileData.resetReason || profileData.resetReason.length < 10) {
+      alert("Please provide a detailed reason (at least 10 characters) for the password reset.");
+      return;
+    }
+
+    try {
+      const config = { headers: { Authorization: `Bearer ${user.token}` } };
+      await axios.post('http://localhost:5000/api/auth/request-reset', { reason: profileData.resetReason }, config);
+
+      alert("✅ Password reset request sent to Admin!");
+
+      // Refresh to show pending status
+      const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
+      setProfileData(prev => ({
+        ...prev,
+        resetStatus: profileRes.data.resetRequest?.status,
+        resetRequestedAt: profileRes.data.resetRequest?.requestedAt,
+        resetReason: '' // Clear input
+      }));
+
+    } catch (err) {
+      alert('❌ Error sending request: ' + (err.response?.data?.message || 'Unknown error'));
     }
   };
 
@@ -926,6 +1004,56 @@ const OrganizerDashboard = () => {
     };
 
     return { ...baseStyle, ...(statusColors[status] || statusColors['Draft']) };
+  };
+
+  // Export Analytics Report
+  const exportAnalyticsCSV = () => {
+    if (!myEvents || myEvents.length === 0) {
+      alert('No data to export');
+      return;
+    }
+
+    const headers = ['Event Name', 'Type', 'Status', 'Start Date', 'Registrations', 'Capacity', 'Fill %', 'Fee (INR)', 'Revenue (INR)', 'Merch Sold'];
+
+    // Helper to escape CSV values
+    const escapeCSV = (val) => `"${String(val).replace(/"/g, '""')}"`;
+
+    const rows = myEvents.map(event => {
+      const regs = event.participants?.length || 0;
+      const cap = event.registrationLimit || 0;
+      const fill = cap > 0 ? Math.round((regs / cap) * 100) : 0;
+      const fee = event.registrationFee || 0;
+
+      const teamMembers = (event.teamRegistrations || []).reduce((s, t) => s + (t.members?.length || 0), 0);
+      const eventRevenue = event.type === 'Team' ? teamMembers * fee : regs * fee;
+
+      const merchSold = event.type === 'Merchandise' ? (event.soldCount || 0) : 'N/A';
+
+      return [
+        escapeCSV(event.name),
+        escapeCSV(event.type),
+        escapeCSV(event.status || 'Draft'),
+        escapeCSV(event.startDate ? new Date(event.startDate).toLocaleDateString() : 'TBD'),
+        regs,
+        (cap || 'Unlimited'),
+        `${fill}%`,
+        fee,
+        eventRevenue,
+        merchSold
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Event_Analytics_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -1175,14 +1303,140 @@ const OrganizerDashboard = () => {
                 </>
               )}
 
-              <input
-                type="text"
-                placeholder="Eligibility (e.g. All Students)"
+              {/* Merchandise Specific Fields */}
+              {formData.type === 'Merchandise' && (
+                <div style={{ background: '#f9f9f9', padding: '15px', borderRadius: '8px', border: '1px solid #eee', gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#333' }}>🛍️ Merchandise Details</h4>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#666', marginBottom: '8px' }}>Total Stock Quantity *</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 100"
+                        style={inputStyle}
+                        value={formData.merchandiseDetails?.stockQuantity || ''}
+                        onChange={e => setFormData(prev => ({
+                          ...prev,
+                          merchandiseDetails: { ...prev.merchandiseDetails, stockQuantity: e.target.value }
+                        }))}
+                        required
+                        min="1"
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#666', marginBottom: '8px' }}>Max Purchase Per User *</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 2"
+                        style={inputStyle}
+                        value={formData.merchandiseDetails?.purchaseLimitPerUser || ''}
+                        onChange={e => setFormData(prev => ({
+                          ...prev,
+                          merchandiseDetails: { ...prev.merchandiseDetails, purchaseLimitPerUser: e.target.value }
+                        }))}
+                        required
+                        min="1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Item Variants Section */}
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <label style={{ fontSize: '0.9rem', fontWeight: '600', color: '#666' }}>Item Variants (Optional)</label>
+                      <button
+                        type="button"
+                        style={{ padding: '5px 10px', background: '#e0e0e0', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem' }}
+                        onClick={() => {
+                          const currentVariants = formData.merchandiseDetails?.itemVariants || [];
+                          setFormData(prev => ({
+                            ...prev,
+                            merchandiseDetails: {
+                              ...prev.merchandiseDetails,
+                              itemVariants: [...currentVariants, { variantName: '', size: '', color: '' }]
+                            }
+                          }));
+                        }}
+                      >
+                        + Add Variant
+                      </button>
+                    </div>
+
+                    {(formData.merchandiseDetails?.itemVariants || []).map((variant, idx) => (
+                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="Variant Name"
+                          style={{ ...inputStyle, padding: '8px' }}
+                          value={variant.variantName}
+                          onChange={(e) => {
+                            const newVariants = [...formData.merchandiseDetails.itemVariants];
+                            newVariants[idx].variantName = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              merchandiseDetails: { ...prev.merchandiseDetails, itemVariants: newVariants }
+                            }));
+                          }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Size"
+                          style={{ ...inputStyle, padding: '8px' }}
+                          value={variant.size}
+                          onChange={(e) => {
+                            const newVariants = [...formData.merchandiseDetails.itemVariants];
+                            newVariants[idx].size = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              merchandiseDetails: { ...prev.merchandiseDetails, itemVariants: newVariants }
+                            }));
+                          }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Color"
+                          style={{ ...inputStyle, padding: '8px' }}
+                          value={variant.color}
+                          onChange={(e) => {
+                            const newVariants = [...formData.merchandiseDetails.itemVariants];
+                            newVariants[idx].color = e.target.value;
+                            setFormData(prev => ({
+                              ...prev,
+                              merchandiseDetails: { ...prev.merchandiseDetails, itemVariants: newVariants }
+                            }));
+                          }}
+                        />
+                        <button
+                          type="button"
+                          style={{ color: '#f44336', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
+                          onClick={() => {
+                            const newVariants = formData.merchandiseDetails.itemVariants.filter((_, i) => i !== idx);
+                            setFormData(prev => ({
+                              ...prev,
+                              merchandiseDetails: { ...prev.merchandiseDetails, itemVariants: newVariants }
+                            }));
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <select
                 style={inputStyle}
                 value={formData.eligibility}
                 onChange={e => setFormData({ ...formData, eligibility: e.target.value })}
                 required
-              />
+              >
+                <option value="" disabled>Select Eligibility</option>
+                <option value="IIIT">IIIT Students/Faculty Only</option>
+                <option value="Non-IIIT">Non-IIIT Only</option>
+                <option value="Both">Open to All (Both)</option>
+              </select>
 
               <input
                 type="number"
@@ -1575,6 +1829,44 @@ const OrganizerDashboard = () => {
                     🚀 Publish Event
                   </button>
                 )}
+
+                {/* Cancel Event Button */}
+                {(() => {
+                  const isPaid = selectedEventDetails.registrationFee > 0;
+                  const isCancelled = selectedEventDetails.status === 'Cancelled';
+                  const isCompleted = selectedEventDetails.status === 'Completed';
+
+                  // Check 48 hour rule
+                  const eventDate = new Date(selectedEventDetails.startDate);
+                  const now = new Date();
+                  const timeDiff = eventDate - now;
+                  const daysDiff = timeDiff / (1000 * 3600 * 24);
+
+                  const canCancel = !isPaid && !isCancelled && !isCompleted && daysDiff >= 2;
+
+                  if (canCancel) {
+                    return (
+                      <button
+                        onClick={() => handleCancelEvent(selectedEventDetails._id)}
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: '8px',
+                          background: '#ffebee',
+                          color: '#c62828',
+                          border: '1px solid #c62828',
+                          cursor: 'pointer',
+                          fontSize: '1rem',
+                          fontWeight: 'bold',
+                          marginLeft: '10px',
+                          transition: 'all 0.3s ease'
+                        }}
+                      >
+                        🚫 Cancel Event
+                      </button>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
 
@@ -1986,18 +2278,35 @@ const OrganizerDashboard = () => {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap' }}>
                               {/* Team Attendance Badge */}
-                              <div style={{
-                                padding: '8px 12px',
-                                borderRadius: '8px',
-                                background: attendedCount === team.members.length ? '#4caf50' : (attendedCount > 0 ? '#ff9800' : '#f44336'),
-                                color: 'white',
-                                fontSize: '0.85rem',
-                                fontWeight: 'bold',
-                                textAlign: 'center'
-                              }}>
-                                {attendedCount === team.members.length ? '✅ All Present' :
-                                  attendedCount > 0 ? `⏳ ${attendedCount}/${team.members.length}` :
-                                    '❌ None Yet'}
+                              <div style={{ textAlign: 'center' }}>
+                                <div style={{
+                                  padding: '8px 12px',
+                                  borderRadius: '8px',
+                                  background: attendedCount === team.members.length ? '#4caf50' : (attendedCount > 0 ? '#ff9800' : '#f44336'),
+                                  color: 'white',
+                                  fontSize: '0.85rem',
+                                  fontWeight: 'bold',
+                                  marginBottom: '4px'
+                                }}>
+                                  {attendedCount === team.members.length
+                                    ? '✅ All Present'
+                                    : attendedCount > 0
+                                      ? `⏳ ${attendedCount}/${team.members.length} arrived`
+                                      : '❌ None arrived yet'}
+                                </div>
+                                {attendedCount < team.members.length && (
+                                  <div style={{
+                                    fontSize: '0.78rem',
+                                    color: '#e65100',
+                                    fontWeight: '600',
+                                    background: '#fff3e0',
+                                    padding: '3px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #ffcc02'
+                                  }}>
+                                    {team.members.length - attendedCount} member{team.members.length - attendedCount !== 1 ? 's' : ''} still to arrive
+                                  </div>
+                                )}
                               </div>
                               <div style={{ textAlign: 'right' }}>
                                 <p style={{ margin: '0 0 5px 0', fontSize: '0.85rem', color: '#999' }}>Total Fee</p>
@@ -2936,10 +3245,33 @@ const OrganizerDashboard = () => {
           return (
             <>
               <div style={welcomeBoxStyle}>
-                <h1 style={{ fontSize: '2.2rem', margin: '0 0 10px 0', color: '#333' }}>📊 Event Analytics</h1>
-                <p style={{ color: '#666', fontSize: '1.05rem', margin: 0 }}>
-                  Comprehensive overview of all your events' performance
-                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <h1 style={{ fontSize: '2.2rem', margin: '0 0 10px 0', color: '#333' }}>📊 Event Analytics</h1>
+                    <p style={{ color: '#666', fontSize: '1.05rem', margin: 0 }}>
+                      Comprehensive overview of all your events' performance
+                    </p>
+                  </div>
+                  <button
+                    onClick={exportAnalyticsCSV}
+                    style={{
+                      padding: '12px 24px',
+                      background: '#1976d2',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '1rem',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 15px rgba(25, 118, 210, 0.4)'
+                    }}
+                  >
+                    📥 Export Full Report
+                  </button>
+                </div>
               </div>
 
               {/* Summary Stats Cards */}
@@ -3543,6 +3875,91 @@ const OrganizerDashboard = () => {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Password Reset Request Section */}
+            <div style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '40px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+              maxWidth: '900px',
+              margin: '30px auto'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                <span style={{ fontSize: '1.5rem' }}>🔐</span>
+                <h3 style={{ margin: 0, color: '#333', fontSize: '1.5rem', fontWeight: '700' }}>
+                  Password Reset
+                </h3>
+              </div>
+
+              {profileData.resetStatus === 'Pending' ? (
+                <div style={{
+                  background: '#fff3e0',
+                  border: '1px solid #ffe0b2',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  textAlign: 'center'
+                }}>
+                  <h4 style={{ margin: '0 0 10px 0', color: '#e65100', fontSize: '1.1rem' }}>⏳ Request Pending</h4>
+                  <p style={{ margin: 0, color: '#555' }}>
+                    You requested a password reset on <strong>{new Date(profileData.resetRequestedAt).toLocaleString()}</strong>.
+                    Please wait for the administrator to approve your request. You will be notified via email or here.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p style={{ margin: '0 0 15px 0', color: '#666', lineHeight: '1.6' }}>
+                    Forgotten your password or believe your account is compromised?
+                    You can request a password reset from the administrator. Please provide a valid reason below.
+                  </p>
+
+                  <div style={{ marginBottom: '15px' }}>
+                    <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: '600', color: '#555', marginBottom: '8px' }}>
+                      Reason for Reset Request
+                    </label>
+                    <textarea
+                      value={profileData.resetReason || ''}
+                      onChange={(e) => setProfileData({ ...profileData, resetReason: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        border: '2px solid #e0e0e0',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        fontFamily: 'inherit',
+                        minHeight: '80px',
+                        outline: 'none',
+                        resize: 'vertical'
+                      }}
+                      placeholder="e.g., I forgot my password, Suspicious activity detected, etc."
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={handleResetRequest}
+                      disabled={!profileData.resetReason || profileData.resetReason.length < 10}
+                      style={{
+                        padding: '10px 24px',
+                        background: (!profileData.resetReason || profileData.resetReason.length < 10)
+                          ? '#bdbdbd'
+                          : 'linear-gradient(135deg, #f5576c 0%, #d32f2f 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '0.95rem',
+                        fontWeight: '600',
+                        cursor: (!profileData.resetReason || profileData.resetReason.length < 10) ? 'not-allowed' : 'pointer',
+                        boxShadow: (!profileData.resetReason || profileData.resetReason.length < 10) ? 'none' : '0 4px 15px rgba(244, 67, 54, 0.4)',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      📨 Send Request
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

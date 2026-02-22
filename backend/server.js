@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const eventRoutes = require('./routes/eventRoutes');
 dotenv.config();
 const userRoutes = require('./routes/userRoutes');
+const adminSeeder = require('./utils/adminSeeder'); // Import the admin seeder
 const app = express();
 
 // CORS Configuration for Production
@@ -33,9 +34,14 @@ app.use(cors({
 // Middleware
 app.use(express.json()); // Essential for parsing req.body
 app.use('/api/events', eventRoutes);
-// Connect to MongoDB [cite: 14, 154]
+
+// Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
+  .then(async () => {
+    console.log("✅ MongoDB Connected");
+    // Auto-seed admin on startup
+    await adminSeeder();
+  })
   .catch(err => console.log("❌ DB Connection Error:", err));
 
 // Health check endpoint
@@ -57,4 +63,7 @@ app.use('/api/forum', require('./routes/forumRoutes')); // Discussion forum rout
 app.use('/api/feedback', require('./routes/feedbackRoutes')); // Feedback routes
 app.use('/api/security', require('./routes/securityRoutes')); // Security monitoring routes
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`[SYSTEM] Server restarted at ${new Date().toISOString()} - reload verify`);
+});

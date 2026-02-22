@@ -8,8 +8,13 @@ const axios = require('axios');
  * @param {string} organizerName - The organizer's display name
  * @returns {object} { success: boolean, error?: string }
  */
-const sendEventToDiscord = async (webhookUrl, event, organizerName) => {
+const sendEventToDiscord = async (clubWebhookUrl, event, organizerName) => {
+  // Use the global fixed webhook URL if defined in environment variables, 
+  // otherwise fallback to the club-specific URL provided.
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL || clubWebhookUrl;
+
   if (!webhookUrl) {
+    console.log('ℹ️ Discord notifications disabled (No webhook URL)');
     return { success: false, error: 'No Discord webhook URL configured' };
   }
 
@@ -17,7 +22,7 @@ const sendEventToDiscord = async (webhookUrl, event, organizerName) => {
     // Build a rich embed for Discord
     const typeEmoji = event.type === 'Team' ? '👥' : event.type === 'Merchandise' ? '🛍️' : '📅';
     const feeText = event.registrationFee > 0 ? `₹${event.registrationFee}` : 'Free';
-    
+
     const fields = [
       { name: '📅 Type', value: event.type || 'Normal', inline: true },
       { name: '💰 Fee', value: feeText, inline: true },
@@ -28,24 +33,30 @@ const sendEventToDiscord = async (webhookUrl, event, organizerName) => {
       fields.push({ name: '📍 Venue', value: event.venue, inline: true });
     }
 
-    if (event.startDate) {
-      fields.push({ 
-        name: '🕐 Date', 
-        value: new Date(event.startDate).toLocaleDateString('en-IN', { 
-          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
-        }), 
-        inline: true 
+    // Date logic: use eventSessions if legacy startDate is missing
+    let displayDate = event.startDate;
+    if (!displayDate && event.eventSessions && event.eventSessions.length > 0) {
+      displayDate = event.eventSessions[0].startDate;
+    }
+
+    if (displayDate) {
+      fields.push({
+        name: '🕐 Date',
+        value: new Date(displayDate).toLocaleDateString('en-IN', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        }),
+        inline: true
       });
     }
 
     if (event.registrationDeadline) {
-      fields.push({ 
-        name: '⏰ Registration Deadline', 
-        value: new Date(event.registrationDeadline).toLocaleDateString('en-IN', { 
+      fields.push({
+        name: '⏰ Registration Deadline',
+        value: new Date(event.registrationDeadline).toLocaleDateString('en-IN', {
           weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
           hour: '2-digit', minute: '2-digit'
-        }), 
-        inline: false 
+        }),
+        inline: false
       });
     }
 
@@ -59,10 +70,10 @@ const sendEventToDiscord = async (webhookUrl, event, organizerName) => {
 
     // Team event details
     if (event.type === 'Team' && event.teamDetails) {
-      fields.push({ 
-        name: '👥 Team Size', 
-        value: `${event.teamDetails.minTeamSize} - ${event.teamDetails.maxTeamSize} members`, 
-        inline: true 
+      fields.push({
+        name: '👥 Team Size',
+        value: `${event.teamDetails.minTeamSize} - ${event.teamDetails.maxTeamSize} members`,
+        inline: true
       });
     }
 
@@ -89,7 +100,7 @@ const sendEventToDiscord = async (webhookUrl, event, organizerName) => {
       timeout: 10000
     });
 
-    console.log(`✅ Discord webhook sent for event: ${event.name}`);
+    console.log(`✅ Discord notification sent via ${process.env.DISCORD_WEBHOOK_URL ? 'Global' : 'Club'} Webhook for: ${event.name}`);
     return { success: true };
   } catch (err) {
     console.error('❌ Discord webhook error:', err.response?.data || err.message);

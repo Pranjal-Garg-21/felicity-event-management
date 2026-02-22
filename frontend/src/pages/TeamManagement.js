@@ -17,7 +17,12 @@ const TeamManagement = () => {
         axios.get('http://localhost:5000/api/teams/invitations', config)
       ]);
       setMyTeams(teamsRes.data);
-      setInvitations(invitesRes.data);
+
+      // Filter out invitations for teams the user leads (they shouldn't accept their own team)
+      const filteredInvitations = (invitesRes.data || []).filter(inv =>
+        inv.teamLeaderEmail?.toLowerCase() !== user.email?.toLowerCase()
+      );
+      setInvitations(filteredInvitations);
       setLoading(false);
     } catch (err) {
       console.error('Error fetching team data:', err);
@@ -29,8 +34,20 @@ const TeamManagement = () => {
     if (user?.token) {
       fetchData();
     }
+
+    // Auto-refresh when on invitations tab
+    let interval;
+    if (activeTab === 'invitations' && user?.token) {
+      interval = setInterval(() => {
+        fetchData();
+      }, 15000); // Refresh every 15 seconds
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.token]);
+  }, [user?.token, activeTab]);
 
   const handleAcceptInvite = async (inviteCode) => {
     try {
@@ -40,10 +57,10 @@ const TeamManagement = () => {
         {},
         config
       );
-      
+
       // Remove invitation from UI immediately
       setInvitations(prev => prev.filter(inv => inv.inviteCode !== inviteCode));
-      
+
       alert(data.message);
       fetchData(); // Refresh all data
     } catch (err) {
@@ -231,16 +248,41 @@ const TeamManagement = () => {
                     </div>
                   </div>
 
-                  {/* Team Members */}
                   <div style={{
                     background: '#f9f9f9',
                     borderRadius: '8px',
                     padding: '15px',
                     marginBottom: '15px'
                   }}>
-                    <h4 style={{ margin: '0 0 12px 0', color: '#555', fontSize: '0.95rem' }}>
-                      Team Members ({team.members.filter(m => m.status === 'Accepted').length}/{team.teamSize})
-                    </h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <h4 style={{ margin: 0, color: '#555', fontSize: '0.95rem' }}>
+                        Team Members ({team.members.filter(m => m.status === 'Accepted').length}/{team.members.length})
+                      </h4>
+                      {team.status === 'Pending' && team.members.filter(m => m.status === 'Pending').length > 0 && (
+                        <span style={{ fontSize: '0.8rem', color: '#ff9800', fontWeight: '600' }}>
+                          ⏳ {team.members.filter(m => m.status === 'Pending').length} pending
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Progress Bar */}
+                    {team.status === 'Pending' && (
+                      <div style={{
+                        background: '#e0e0e0',
+                        borderRadius: '10px',
+                        height: '8px',
+                        marginBottom: '15px',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{
+                          background: 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)',
+                          height: '100%',
+                          width: `${(team.members.filter(m => m.status === 'Accepted').length / team.members.length) * 100}%`,
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                    )}
+
                     <div style={{ display: 'grid', gap: '8px' }}>
                       {team.members.map((member, idx) => (
                         <div
@@ -271,7 +313,7 @@ const TeamManagement = () => {
                             background: member.status === 'Accepted' ? '#e8f5e9' : member.status === 'Declined' ? '#ffebee' : '#fff3e0',
                             color: member.status === 'Accepted' ? '#2e7d32' : member.status === 'Declined' ? '#c62828' : '#e65100'
                           }}>
-                            {member.status}
+                            {member.status === 'Accepted' ? '✓ Accepted' : member.status === 'Declined' ? '✕ Declined' : '⏳ Pending'}
                           </span>
                         </div>
                       ))}
@@ -326,6 +368,42 @@ const TeamManagement = () => {
                       ✕ Cancel Team
                     </button>
                   )}
+
+                  {/* Completed team - read-only historical record */}
+                  {team.status === 'Complete' && (
+                    <div style={{
+                      background: '#e8f5e9',
+                      border: '2px solid #4caf50',
+                      borderRadius: '8px',
+                      padding: '15px',
+                      textAlign: 'center'
+                    }}>
+                      <p style={{ margin: 0, color: '#2e7d32', fontWeight: '600', fontSize: '0.95rem' }}>
+                        ✓ Team Registration Complete
+                      </p>
+                      <p style={{ margin: '5px 0 0 0', color: '#558b2f', fontSize: '0.85rem' }}>
+                        All members have received their tickets. This is a historical record.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Cancelled team - read-only historical record */}
+                  {team.status === 'Cancelled' && (
+                    <div style={{
+                      background: '#ffebee',
+                      border: '2px solid #f44336',
+                      borderRadius: '8px',
+                      padding: '15px',
+                      textAlign: 'center'
+                    }}>
+                      <p style={{ margin: 0, color: '#c62828', fontWeight: '600', fontSize: '0.95rem' }}>
+                        ✕ Team Cancelled
+                      </p>
+                      <p style={{ margin: '5px 0 0 0', color: '#d32f2f', fontSize: '0.85rem' }}>
+                        This team registration was cancelled. This is a historical record.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -365,56 +443,119 @@ const TeamManagement = () => {
                     border: '2px solid #ff9800'
                   }}
                 >
-                  <div style={{ marginBottom: '15px' }}>
-                    <h3 style={{ margin: '0 0 8px 0', color: '#333', fontSize: '1.3rem' }}>
-                      {invite.teamName}
-                    </h3>
+                  {/* Invitation Header */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '1.5rem' }}>👥</span>
+                      <h3 style={{ margin: 0, color: '#333', fontSize: '1.3rem' }}>
+                        {invite.teamName}
+                      </h3>
+                    </div>
                     <p style={{ margin: '0 0 5px 0', color: '#667eea', fontSize: '0.95rem', fontWeight: '600' }}>
                       📅 {invite.eventName}
                     </p>
-                    <p style={{ margin: '0 0 5px 0', color: '#666', fontSize: '0.9rem' }}>
-                      👑 Team Leader: <strong>{invite.teamLeaderName}</strong>
+                    {invite.eventDate && (
+                      <p style={{ margin: '0 0 5px 0', color: '#888', fontSize: '0.85rem' }}>
+                        🕐 {new Date(invite.eventDate).toLocaleDateString('en-US', {
+                          weekday: 'short',
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Team Leader Info */}
+                  <div style={{
+                    background: '#f5f5f5',
+                    borderRadius: '8px',
+                    padding: '12px',
+                    marginBottom: '15px'
+                  }}>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.85rem', color: '#666', fontWeight: '600' }}>
+                      Team Leader:
                     </p>
-                    <p style={{ margin: 0, color: '#999', fontSize: '0.85rem' }}>
-                      Invited {new Date(invite.invitedAt).toLocaleDateString()}
+                    <p style={{ margin: '0 0 2px 0', color: '#333', fontSize: '0.9rem', fontWeight: '600' }}>
+                      👑 {invite.teamLeaderName}
+                    </p>
+                    <p style={{ margin: 0, color: '#888', fontSize: '0.8rem' }}>
+                      {invite.teamLeaderEmail}
                     </p>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button
-                      onClick={() => handleAcceptInvite(invite.inviteCode)}
-                      style={{
-                        flex: 1,
-                        padding: '12px',
-                        background: 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: '700',
-                        fontSize: '0.95rem',
-                        boxShadow: '0 4px 12px rgba(76, 175, 80, 0.4)'
-                      }}
-                    >
-                      ✓ Accept
-                    </button>
-                    <button
-                      onClick={() => handleDeclineInvite(invite.inviteCode)}
-                      style={{
-                        flex: 1,
-                        padding: '12px',
-                        background: '#fff',
-                        color: '#f44336',
-                        border: '2px solid #f44336',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: '700',
-                        fontSize: '0.95rem'
-                      }}
-                    >
-                      ✕ Decline
-                    </button>
+                  {/* Invitation Details */}
+                  <div style={{ marginBottom: '20px', fontSize: '0.85rem', color: '#666' }}>
+                    <p style={{ margin: '5px 0' }}>
+                      <strong>Invited:</strong> {new Date(invite.invitedAt).toLocaleDateString()}
+                    </p>
+                    <p style={{ margin: '5px 0' }}>
+                      <strong>Invite Code:</strong> <span style={{ fontFamily: 'monospace', background: '#e0e0e0', padding: '2px 6px', borderRadius: '4px' }}>{invite.inviteCode}</span>
+                    </p>
                   </div>
+
+                  {/* Action Buttons - Only show for pending invitations */}
+                  {invite.status === 'Pending' ? (
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        onClick={() => handleAcceptInvite(invite.inviteCode)}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          background: 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: '700',
+                          fontSize: '0.95rem',
+                          boxShadow: '0 4px 12px rgba(76, 175, 80, 0.4)'
+                        }}
+                      >
+                        ✓ Accept Invitation
+                      </button>
+                      <button
+                        onClick={() => handleDeclineInvite(invite.inviteCode)}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          background: '#fff',
+                          color: '#f44336',
+                          border: '2px solid #f44336',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontWeight: '700',
+                          fontSize: '0.95rem'
+                        }}
+                      >
+                        ✕ Decline
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{
+                      padding: '15px',
+                      background: invite.status === 'Accepted' ? '#e8f5e9' : '#ffebee',
+                      border: `2px solid ${invite.status === 'Accepted' ? '#4caf50' : '#f44336'}`,
+                      borderRadius: '8px',
+                      textAlign: 'center'
+                    }}>
+                      <p style={{
+                        margin: 0,
+                        color: invite.status === 'Accepted' ? '#2e7d32' : '#c62828',
+                        fontWeight: '600',
+                        fontSize: '0.95rem'
+                      }}>
+                        {invite.status === 'Accepted' ? '✓ Invitation Accepted' : '✕ Invitation Declined'}
+                      </p>
+                      <p style={{
+                        margin: '5px 0 0 0',
+                        color: invite.status === 'Accepted' ? '#558b2f' : '#d32f2f',
+                        fontSize: '0.8rem'
+                      }}>
+                        This is a historical record. No further action needed.
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

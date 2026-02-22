@@ -9,6 +9,8 @@ exports.scanAttendance = async (req, res) => {
   try {
     const { ticketId, eventId, scanMethod, manualOverride, overrideReason } = req.body;
 
+    console.log(`📡 Scan Request: TicketID='${ticketId}', EventID='${eventId}'`);
+
     if (!ticketId || !eventId) {
       return res.status(400).json({ message: 'Ticket ID and Event ID are required' });
     }
@@ -25,25 +27,34 @@ exports.scanAttendance = async (req, res) => {
     }
 
     // Find the user with this ticket
-    const user = await User.findOne({ 'eventTickets.ticketId': ticketId });
+    // Case-insensitive search for ticketId just in case
+    const user = await User.findOne({
+      'eventTickets.ticketId': { $regex: new RegExp(`^${ticketId}$`, 'i') }
+    });
+
     if (!user) {
+      console.log(`❌ User NOT found for ticket: '${ticketId}'`);
       return res.status(404).json({ message: 'Invalid ticket - User not found' });
     }
+    console.log(`✅ User found: ${user.email} (${user._id})`);
 
     // Find the specific ticket
-    const ticket = user.eventTickets.find(t => t.ticketId === ticketId);
+    const ticket = user.eventTickets.find(t => t.ticketId.toLowerCase() === ticketId.toLowerCase());
     if (!ticket) {
+      console.log(`❌ Ticket object missing in user array for: '${ticketId}'`);
       return res.status(404).json({ message: 'Ticket not found' });
     }
+    console.log(`🎫 Ticket found in user record. EventID in ticket: ${ticket.eventId}`);
 
     // Verify ticket is for this event
     if (ticket.eventId.toString() !== eventId) {
+      console.log(`❌ Ticket EventID mismatch! Ticket: ${ticket.eventId}, Scan: ${eventId}`);
       return res.status(400).json({ message: 'This ticket is not valid for this event' });
     }
 
     // Check if already scanned (duplicate scan)
     if (ticket.scanned && !manualOverride) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: 'Ticket already scanned',
         alreadyScanned: true,
         scannedAt: ticket.scannedAt,
@@ -63,7 +74,7 @@ exports.scanAttendance = async (req, res) => {
     console.log('📝 After update - ticket.scanned:', ticket.scanned);
     await user.save();
     console.log('💾 User saved successfully');
-    
+
     // Verify the save worked by re-fetching
     const verifyUser = await User.findById(user._id);
     const verifyTicket = verifyUser.eventTickets.find(t => t.ticketId === ticketId);
@@ -111,7 +122,7 @@ exports.scanAttendance = async (req, res) => {
     console.error('Error stack:', error.stack);
     console.error('Request body:', req.body);
     console.error('User:', req.user);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Server error during attendance scan',
       error: error.message,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
@@ -141,10 +152,10 @@ exports.getEventAttendance = async (req, res) => {
 
     // Get all participants
     const allParticipants = event.participants;
-    
+
     console.log('📊 Total participants:', allParticipants.length);
     console.log('📋 Attendance log entries:', event.attendanceLog?.length || 0);
-    
+
     if (event.attendanceLog && event.attendanceLog.length > 0) {
       console.log('🔍 First attendance log entry:', {
         participantId: event.attendanceLog[0].participantId,
@@ -158,16 +169,16 @@ exports.getEventAttendance = async (req, res) => {
     const scannedMap = new Map();
     (event.attendanceLog || []).forEach(log => {
       // Handle both populated and non-populated participantId
-      const participantIdStr = log.participantId?._id 
-        ? log.participantId._id.toString() 
+      const participantIdStr = log.participantId?._id
+        ? log.participantId._id.toString()
         : log.participantId?.toString();
-      
+
       if (participantIdStr) {
         scannedMap.set(participantIdStr, log.scannedAt);
         console.log('✅ Added to scannedMap:', participantIdStr);
       }
     });
-    
+
     console.log('🗺️ ScannedMap size:', scannedMap.size);
 
     // Separate scanned and not scanned
@@ -177,7 +188,7 @@ exports.getEventAttendance = async (req, res) => {
     for (const participant of allParticipants) {
       const participantId = participant._id.toString();
       const scannedAt = scannedMap.get(participantId);
-      
+
       console.log(`👤 Checking participant ${participant.firstName}: ID=${participantId}, scannedAt=${scannedAt}`);
 
       const participantData = {
@@ -217,13 +228,13 @@ exports.getEventAttendance = async (req, res) => {
       totalRegistered: allParticipants.length,
       totalScanned: scannedParticipants.length,
       totalNotScanned: notScannedParticipants.length,
-      attendancePercentage: allParticipants.length > 0 
+      attendancePercentage: allParticipants.length > 0
         ? ((scannedParticipants.length / allParticipants.length) * 100).toFixed(2)
         : 0,
-      scannedParticipants: scannedParticipants.sort((a, b) => 
+      scannedParticipants: scannedParticipants.sort((a, b) =>
         new Date(b.scannedAt) - new Date(a.scannedAt)
       ),
-      notScannedParticipants: notScannedParticipants.sort((a, b) => 
+      notScannedParticipants: notScannedParticipants.sort((a, b) =>
         a.name.localeCompare(b.name)
       ),
       attendanceLog: event.attendanceLog || []
@@ -232,6 +243,50 @@ exports.getEventAttendance = async (req, res) => {
   } catch (error) {
     console.error('Get attendance error:', error);
     res.status(500).json({ message: 'Server error fetching attendance' });
+  }
+};
+
+// @desc    Scan QR code from uploaded file
+// @route   POST /api/attendance/scan-file
+// @access  Private (Organizer)
+exports.scanFile = async (req, res) => {
+  try {
+    const { qrData, eventId } = req.body;
+
+    if (!qrData || !eventId) {
+      return res.status(400).json({ message: 'QR data and Event ID are required' });
+    }
+
+    // Parse QR data (it should be JSON with ticketId, eventId, email)
+    let parsedData;
+    try {
+      parsedData = JSON.parse(qrData);
+    } catch (err) {
+      return res.status(400).json({ message: 'Invalid QR code format' });
+    }
+
+    const { ticketId } = parsedData;
+
+    if (!ticketId) {
+      return res.status(400).json({ message: 'QR code does not contain ticket information' });
+    }
+
+    // Use the existing scanAttendance logic
+    req.body = {
+      ticketId,
+      eventId,
+      scanMethod: 'File Upload'
+    };
+
+    // Call scanAttendance
+    return exports.scanAttendance(req, res);
+
+  } catch (error) {
+    console.error('Scan file error:', error);
+    res.status(500).json({
+      message: 'Server error scanning file',
+      error: error.message
+    });
   }
 };
 
@@ -265,8 +320,8 @@ exports.exportAttendanceCSV = async (req, res) => {
       );
 
       const status = ticket?.scanned ? 'Present' : 'Absent';
-      const scannedAt = ticket?.scannedAt 
-        ? new Date(ticket.scannedAt).toLocaleString() 
+      const scannedAt = ticket?.scannedAt
+        ? new Date(ticket.scannedAt).toLocaleString()
         : 'N/A';
 
       csv += `"${participant.firstName} ${participant.lastName}",`;

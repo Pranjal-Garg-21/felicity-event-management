@@ -42,14 +42,14 @@ const QRScanner = () => {
       console.log('Fetching attendance dashboard for event:', eventId);
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.get(`http://localhost:5000/api/attendance/event/${eventId}`, config);
-      
+
       console.log('Attendance data received:', {
         totalRegistered: data.totalRegistered,
         totalScanned: data.totalScanned,
         totalNotScanned: data.totalNotScanned,
         attendancePercentage: data.attendancePercentage
       });
-      
+
       // Map the response from new controller format
       const stats = {
         totalRegistered: data.totalRegistered,
@@ -58,7 +58,7 @@ const QRScanner = () => {
         attendanceRate: data.attendancePercentage,
         lastScanTime: data.scannedParticipants.length > 0 ? data.scannedParticipants[0].scannedAt : null
       };
-      
+
       console.log('Setting attendance stats:', stats);
       setAttendanceStats(stats);
       setAttendedList(data.scannedParticipants);
@@ -84,19 +84,19 @@ const QRScanner = () => {
   const startCameraScanning = async () => {
     try {
       console.log('Starting camera...');
-      
+
       // Stop any existing stream first
       stopCameraScanning();
-      
+
       // Set scanning state first to show UI
       setScanning(true);
-      
+
       // Small delay to ensure video element is rendered
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // Request camera access
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
+        video: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1280, min: 640 },
           height: { ideal: 720, min: 480 }
@@ -106,25 +106,25 @@ const QRScanner = () => {
       console.log('Camera access granted, stream:', stream);
       console.log('Stream active:', stream.active);
       console.log('Stream tracks:', stream.getTracks());
-      
+
       streamRef.current = stream;
-      
+
       if (videoRef.current) {
         console.log('Setting video srcObject...');
         videoRef.current.srcObject = stream;
-        
+
         // Force video attributes
         videoRef.current.setAttribute('autoplay', '');
         videoRef.current.setAttribute('playsinline', '');
         videoRef.current.setAttribute('muted', '');
-        
+
         // Multiple attempts to play
         const attemptPlay = async (attempt = 1) => {
           try {
             console.log(`Play attempt ${attempt}...`);
             await videoRef.current.play();
             console.log('Video playing! VideoWidth:', videoRef.current.videoWidth, 'VideoHeight:', videoRef.current.videoHeight);
-            
+
             // Start QR scanning after successful play
             setTimeout(() => {
               if (videoRef.current && videoRef.current.videoWidth > 0) {
@@ -137,7 +137,7 @@ const QRScanner = () => {
                 }
               }
             }, 500);
-            
+
           } catch (err) {
             console.error(`Play attempt ${attempt} failed:`, err);
             if (attempt < 3) {
@@ -147,14 +147,14 @@ const QRScanner = () => {
             }
           }
         };
-        
+
         // Start play attempts
         attemptPlay();
       }
-      
+
     } catch (error) {
       console.error('Camera access error:', error);
-      
+
       if (error.name === 'NotAllowedError') {
         alert('❌ Camera permission denied. Please allow camera access in your browser settings and refresh the page.');
       } else if (error.name === 'NotFoundError') {
@@ -164,7 +164,7 @@ const QRScanner = () => {
       } else {
         alert('❌ Unable to access camera: ' + error.message + '. Please try file upload instead.');
       }
-      
+
       setScanning(false);
     }
   };
@@ -178,18 +178,18 @@ const QRScanner = () => {
       });
       streamRef.current = null;
     }
-    
+
     // Clear video source
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
-    
+
     // Clear scan interval
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);
       scanIntervalRef.current = null;
     }
-    
+
     setScanning(false);
     console.log('Camera scanning stopped');
   };
@@ -208,12 +208,12 @@ const QRScanner = () => {
       try {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        
+
         if (canvas.width === 0 || canvas.height === 0) {
           console.log('Video dimensions not ready yet');
           return;
         }
-        
+
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height);
@@ -237,7 +237,7 @@ const QRScanner = () => {
       // Parse QR code data (it might be JSON or just a string)
       let ticketId = qrData;
       let parsedData = null;
-      
+
       // Try to parse as JSON
       if (typeof qrData === 'string' && (qrData.startsWith('{') || qrData.startsWith('['))) {
         try {
@@ -245,8 +245,10 @@ const QRScanner = () => {
           ticketId = parsedData.ticketId || qrData;
           console.log('Parsed QR data:', parsedData);
         } catch (e) {
-          console.log('QR data is not JSON, using as-is');
+          console.log('QR data is not JSON, using as-is:', qrData);
         }
+      } else {
+        console.log('QR data is simple string:', qrData);
       }
 
       // Prevent duplicate rapid scans
@@ -260,12 +262,12 @@ const QRScanner = () => {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.post(
         'http://localhost:5000/api/attendance/scan',
-        { ticketId, eventId, scanMethod },
+        { ticketId: ticketId.trim(), eventId, scanMethod },
         config
       );
 
       console.log('Scan successful! Response:', data);
-      
+
       setLastScan({
         ticketId,
         time: Date.now(),
@@ -295,7 +297,7 @@ const QRScanner = () => {
 
       // Play error sound
       playBeep(false);
-      
+
       console.error('Scan error:', error.response?.data || error.message);
     }
   };
@@ -315,33 +317,93 @@ const QRScanner = () => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('qrImage', file);
-    formData.append('eventId', eventId);
-
     try {
-      const config = {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-          'Content-Type': 'multipart/form-data'
+      // Create an image object to load the file
+      const img = new Image();
+      const imageUrl = URL.createObjectURL(file);
+
+      img.onload = async () => {
+        try {
+          // Create a canvas to read image data
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+
+          canvas.width = img.width;
+          canvas.height = img.height;
+          context.drawImage(img, 0, 0);
+
+          // Get image data and decode QR
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+          URL.revokeObjectURL(imageUrl); // Clean up
+
+          if (!code) {
+            setLastScan({
+              ticketId: 'file-upload',
+              time: Date.now(),
+              success: false,
+              message: '❌ No QR code found in the image. Please upload a clear QR code image.'
+            });
+            playBeep(false);
+            return;
+          }
+
+          console.log('QR Code decoded from file:', code.data);
+
+          // Send decoded QR data to backend
+          const config = {
+            headers: {
+              Authorization: `Bearer ${user.token}`,
+              'Content-Type': 'application/json'
+            }
+          };
+
+          const { data } = await axios.post(
+            'http://localhost:5000/api/attendance/scan-file',
+            {
+              qrData: code.data,
+              eventId
+            },
+            config
+          );
+
+          setLastScan({
+            ticketId: data.participant?.ticketId || 'scanned',
+            time: Date.now(),
+            success: true,
+            message: `✅ ${data.participant.name} - Attendance marked via file!`,
+            participant: data.participant
+          });
+
+          playBeep(true);
+          setTimeout(() => fetchAttendanceDashboard(), 500);
+
+        } catch (decodeError) {
+          const errorMsg = decodeError.response?.data?.message || decodeError.message || 'Error processing QR code';
+          setLastScan({
+            ticketId: 'file-upload',
+            time: Date.now(),
+            success: false,
+            message: `❌ ${errorMsg}`
+          });
+          playBeep(false);
+          URL.revokeObjectURL(imageUrl);
         }
       };
-      const { data } = await axios.post(
-        'http://localhost:5000/api/attendance/scan-file',
-        formData,
-        config
-      );
 
-      setLastScan({
-        ticketId: data.participant.ticketId,
-        time: Date.now(),
-        success: true,
-        message: `✅ ${data.participant.name} - Attendance marked via file!`,
-        participant: data.participant
-      });
+      img.onerror = () => {
+        setLastScan({
+          ticketId: 'file-upload',
+          time: Date.now(),
+          success: false,
+          message: '❌ Error loading image file'
+        });
+        playBeep(false);
+        URL.revokeObjectURL(imageUrl);
+      };
 
-      playBeep(true);
-      setTimeout(() => fetchAttendanceDashboard(), 500);
+      img.src = imageUrl;
 
     } catch (error) {
       const errorMsg = error.response?.data?.message || 'Error scanning file';
@@ -354,7 +416,7 @@ const QRScanner = () => {
       playBeep(false);
     }
 
-    e.target.value = '';
+    e.target.value = ''; // Clear file input
   };
 
   // Manual Override
@@ -366,7 +428,7 @@ const QRScanner = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      
+
       // Find user ID from email
       const participant = notAttendedList.find(p => p.email === manualEmail);
       if (!participant) {
@@ -376,11 +438,11 @@ const QRScanner = () => {
 
       const { data } = await axios.post(
         'http://localhost:5000/api/attendance/manual',
-        { 
-          userId: participant._id, 
-          eventId, 
+        {
+          userId: participant._id,
+          eventId,
           action: 'mark',
-          reason: manualReason 
+          reason: manualReason
         },
         config
       );
@@ -497,7 +559,7 @@ const QRScanner = () => {
           }
         `}
       </style>
-      
+
       {/* Header */}
       <div style={headerStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -611,11 +673,11 @@ const QRScanner = () => {
 
               {scanning && (
                 <div style={{ marginTop: '20px' }}>
-                  <div style={{ 
-                    background: '#4caf50', 
-                    color: 'white', 
-                    padding: '10px', 
-                    borderRadius: '8px', 
+                  <div style={{
+                    background: '#4caf50',
+                    color: 'white',
+                    padding: '10px',
+                    borderRadius: '8px',
                     marginBottom: '15px',
                     textAlign: 'center',
                     fontWeight: 'bold',
@@ -623,7 +685,7 @@ const QRScanner = () => {
                   }}>
                     📡 Camera Active - Point at QR Code
                   </div>
-                  
+
                   {/* Debug Info */}
                   <div style={{
                     background: '#f0f0f0',
@@ -633,10 +695,10 @@ const QRScanner = () => {
                     fontSize: '0.85rem',
                     textAlign: 'center'
                   }}>
-                    Status: {videoRef.current?.readyState === 4 ? '✅ Video Ready' : '⏳ Loading...'} | 
+                    Status: {videoRef.current?.readyState === 4 ? '✅ Video Ready' : '⏳ Loading...'} |
                     Dimensions: {videoRef.current?.videoWidth || 0}x{videoRef.current?.videoHeight || 0}
                   </div>
-                  
+
                   <div style={{ position: 'relative' }}>
                     <video
                       ref={videoRef}
