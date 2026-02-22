@@ -3,18 +3,19 @@ const bcrypt = require('bcryptjs');
 
 const seedAdmin = async () => {
     try {
-        const adminEmail = process.env.ADMIN_EMAIL || 'admin@felicity.com';
+        const adminEmail = (process.env.ADMIN_EMAIL || 'admin@felicity.com').toLowerCase();
         const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
-        // Check if any admin exists
-        const adminExists = await User.findOne({ role: 'Admin' });
+        console.log(`🛡️ Checking for admin user: ${adminEmail}...`);
 
-        if (!adminExists) {
-            console.log('🛡️ No Admin found, creating default admin...');
+        // Check if the specific admin account already exists
+        let adminAccount = await User.findOne({ email: adminEmail });
 
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(adminPassword, salt);
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(adminPassword, salt);
 
+        if (!adminAccount) {
+            console.log('🛡️ Admin account not found, creating it...');
             await User.create({
                 email: adminEmail,
                 password: hashedPassword,
@@ -23,23 +24,30 @@ const seedAdmin = async () => {
                 lastName: 'Admin',
                 hasCompletedOnboarding: true
             });
-
-            console.log(`✅ Default admin created: ${adminEmail}`);
+            console.log(`✅ Admin account created successfully: ${adminEmail}`);
         } else {
-            console.log('🛡️ Admin account verified.');
+            // Account exists - check if it's an Admin
+            if (adminAccount.role !== 'Admin') {
+                console.log(`🛡️ Account found but role is ${adminAccount.role}. Upgrading to Admin...`);
+                adminAccount.role = 'Admin';
+                await adminAccount.save();
+            }
 
-            // Optional: Update existing admin password if it matches the email but password might be old
-            // This ensures that if the user changes the ADMIN_PASSWORD environment variable, 
-            // the existing admin gets the new password.
-            if (adminExists.email === adminEmail && process.env.ADMIN_FORCE_UPDATE === 'true') {
-                console.log('🛡️ Force updating admin credentials...');
-                const salt = await bcrypt.genSalt(10);
-                const hashedPassword = await bcrypt.hash(adminPassword, salt);
-                adminExists.password = hashedPassword;
-                await adminExists.save();
-                console.log('✅ Admin credentials updated.');
+            // Check if we need to force update the password
+            if (process.env.ADMIN_FORCE_UPDATE === 'true') {
+                console.log('🛡️ Force updating admin password...');
+                adminAccount.password = hashedPassword;
+                await adminAccount.save();
+                console.log('✅ Admin password updated successfully.');
+            } else {
+                console.log('🛡️ Admin account already exists and is verified.');
             }
         }
+
+        // Double check if any other user has the Admin role just in case
+        const totalAdmins = await User.countDocuments({ role: 'Admin' });
+        console.log(`📊 Total Admin accounts in database: ${totalAdmins}`);
+
     } catch (error) {
         console.error('❌ Error in Admin Seeder:', error.message);
     }
