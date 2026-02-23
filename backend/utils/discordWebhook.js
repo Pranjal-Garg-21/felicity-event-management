@@ -121,4 +121,54 @@ const sendEventToDiscord = async (clubWebhookUrl, event, organizerName) => {
   }
 };
 
-module.exports = { sendEventToDiscord };
+/**
+ * Send a Discord notification for a forum announcement.
+ * 
+ * @param {object} event - The event object
+ * @param {string} organizerName - The organizer's name
+ * @param {string} content - The announcement content
+ * @returns {object} { success: boolean, error?: string }
+ */
+const sendAnnouncementToDiscord = async (event, organizerName, content) => {
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+
+  if (!webhookUrl) {
+    return { success: false, error: 'No Discord webhook URL configured' };
+  }
+
+  try {
+    const embed = {
+      title: `📢 New Announcement for ${event.name}`,
+      description: content.length > 1000 ? content.substring(0, 1000) + '...' : content,
+      color: 0xFF5722, // Vibrant Orange
+      fields: [
+        { name: '👤 From', value: organizerName || 'Organizer', inline: true },
+        { name: '📅 Event', value: event.name, inline: true }
+      ],
+      footer: {
+        text: 'Felicity Event Management • Forum Announcement'
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    const payload = {
+      username: 'Felicity Announcement Bot',
+      avatar_url: 'https://cdn-icons-png.flaticon.com/512/3602/3602145.png',
+      content: `⚡ **New Announcement Post in ${event.name}!**`,
+      embeds: [embed]
+    };
+
+    await axios.post(webhookUrl, payload, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000
+    });
+
+    console.log(`✅ Discord announcement notification sent for event: ${event.name}`);
+    return { success: true };
+  } catch (err) {
+    console.error('❌ Discord announcement webhook error:', err.message);
+    return { success: false, error: err.message };
+  }
+};
+
+module.exports = { sendEventToDiscord, sendAnnouncementToDiscord };

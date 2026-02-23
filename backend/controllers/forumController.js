@@ -1,6 +1,7 @@
 const ForumMessage = require('../models/ForumMessage');
 const Event = require('../models/Event');
 const User = require('../models/User');
+const { sendAnnouncementToDiscord } = require('../utils/discordWebhook');
 
 // @desc    Get all messages for an event
 // @route   GET /api/forum/:eventId
@@ -122,7 +123,7 @@ exports.postMessage = async (req, res) => {
       if (!parentMessage || parentMessage.eventId.toString() !== eventId) {
         return res.status(404).json({ message: 'Parent message not found' });
       }
-      
+
       // Update parent reply count
       parentMessage.replyCount += 1;
       parentMessage.lastActivityAt = new Date();
@@ -145,16 +146,19 @@ exports.postMessage = async (req, res) => {
 
     // Send notifications to all participants if this is an announcement
     if (type === 'announcement' && !parentMessageId) {
-      console.log('📢 Sending announcement notifications to participants...');
-      
-      // Get all participants for this event (exclude the organizer who posted)
+      console.log('📢 Sending announcement notifications...');
+
+      // 1. Post to Discord (Non-blocking)
+      const organizer = await User.findById(req.user._id);
+      sendAnnouncementToDiscord(event, organizer?.organizerName || 'Organizer', content)
+        .catch(err => console.error('Discord announcement failed (non-blocking):', err));
+
+      // 2. Internal notifications for all participants
       const participantIds = event.participants.filter(
         pid => pid.toString() !== req.user._id.toString()
       );
-      
+
       if (participantIds.length > 0) {
-        const User = require('../models/User');
-        
         // Create notification object
         const notification = {
           type: 'announcement',
@@ -166,14 +170,14 @@ exports.postMessage = async (req, res) => {
           read: false,
           createdAt: new Date()
         };
-        
+
         // Add notification to all participants
         await User.updateMany(
           { _id: { $in: participantIds } },
           { $push: { notifications: notification } }
         );
-        
-        console.log(`✅ Sent announcement notifications to ${participantIds.length} participant(s)`);
+
+        console.log(`✅ Sent internal announcement notifications to ${participantIds.length} participant(s)`);
       }
     }
 
