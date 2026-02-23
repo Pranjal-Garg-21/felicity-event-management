@@ -30,7 +30,7 @@ const CreateEvent = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       // Sending all required attributes to the backend
-      await axios.post('${API_BASE_URL}/api/events', {
+      await axios.post(`${API_BASE_URL}/api/events`, {
         ...formData,
         customFormFields: customFields 
       }, config);

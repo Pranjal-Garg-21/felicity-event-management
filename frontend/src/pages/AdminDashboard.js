@@ -44,7 +44,7 @@ const AdminDashboard = () => {
   const fetchOrganizers = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('${API_BASE_URL}/api/admin/organizers', config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/admin/organizers`, config);
       setOrganizers(data);
     } catch (err) {
       console.error("Error fetching organizers", err);
@@ -54,7 +54,7 @@ const AdminDashboard = () => {
   const fetchAllEvents = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('${API_BASE_URL}/api/admin/all-events', config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/admin/all-events`, config);
       setAllEvents(data);
     } catch (err) {
       console.error("Error fetching all events", err);
@@ -65,7 +65,7 @@ const AdminDashboard = () => {
   const fetchResetRequests = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('${API_BASE_URL}/api/admin/reset-requests', config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/admin/reset-requests`, config);
       setResetRequests(data);
     } catch (err) {
       console.error("Error fetching reset requests", err);
@@ -82,7 +82,7 @@ const AdminDashboard = () => {
       if (securityFilter.ipAddress) params.ipAddress = securityFilter.ipAddress;
       if (securityFilter.email) params.email = securityFilter.email;
 
-      const { data } = await axios.get('${API_BASE_URL}/api/security/events', { ...config, params });
+      const { data } = await axios.get(`${API_BASE_URL}/api/security/events`, { ...config, params });
       setSecurityEvents(data.events);
       setSecurityPagination(data.pagination);
     } catch (err) {
@@ -95,7 +95,7 @@ const AdminDashboard = () => {
   const fetchSecurityStats = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('${API_BASE_URL}/api/security/stats', config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/security/stats`, config);
       setSecurityStats(data);
     } catch (err) {
       console.error('Error fetching security stats:', err);
@@ -105,7 +105,7 @@ const AdminDashboard = () => {
   const fetchBlockedIPs = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('${API_BASE_URL}/api/security/blocked-ips', config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/security/blocked-ips`, config);
       setBlockedIPs(data);
     } catch (err) {
       console.error('Error fetching blocked IPs:', err);
@@ -116,7 +116,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post('${API_BASE_URL}/api/security/block-ip', blockIPForm, config);
+      await axios.post(`${API_BASE_URL}/api/security/block-ip`, blockIPForm, config);
       alert(`✅ IP ${blockIPForm.ipAddress} blocked!`);
       setBlockIPForm({ ipAddress: '', reason: '', duration: 24 });
       fetchBlockedIPs();
@@ -159,7 +159,7 @@ const AdminDashboard = () => {
   const handleResetAction = async (userId, action) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.post('${API_BASE_URL}/api/admin/handle-reset', { userId, action }, config);
+      const { data } = await axios.post(`${API_BASE_URL}/api/admin/handle-reset`, { userId, action }, config);
 
       if (action === 'approve' && data.generatedPassword) {
         setResetCredentials({
@@ -191,7 +191,7 @@ const AdminDashboard = () => {
         manualPassword: useManualPassword ? formData.manualPassword : null
       };
 
-      const { data } = await axios.post('${API_BASE_URL}/api/admin/create-organizer', payload, config);
+      const { data } = await axios.post(`${API_BASE_URL}/api/admin/create-organizer`, payload, config);
 
       // Show credentials modal
       setNewCredentials({

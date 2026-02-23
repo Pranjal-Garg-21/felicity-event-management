@@ -67,19 +67,19 @@ exports.scanAttendance = async (req, res) => {
     }
 
     // Mark attendance
-    console.log('📝 Before update - ticket.scanned:', ticket.scanned);
-    ticket.scanned = true;
-    ticket.scannedAt = new Date();
+    console.log('📝 Before update - ticket.attended:', ticket.attended);
+    ticket.attended = true;
+    ticket.attendedAt = new Date();
     ticket.scannedBy = req.user._id;
-    console.log('📝 After update - ticket.scanned:', ticket.scanned);
+    console.log('📝 After update - ticket.attended:', ticket.attended);
     await user.save();
     console.log('💾 User saved successfully');
 
     // Verify the save worked by re-fetching
     const verifyUser = await User.findById(user._id);
     const verifyTicket = verifyUser.eventTickets.find(t => t.ticketId === ticketId);
-    console.log('✅ Verification - ticket.scanned after save:', verifyTicket.scanned);
-    console.log('✅ Verification - ticket.scannedAt after save:', verifyTicket.scannedAt);
+    console.log('✅ Verification - ticket.attended after save:', verifyTicket.attended);
+    console.log('✅ Verification - ticket.attendedAt after save:', verifyTicket.attendedAt);
 
     // Add to event's attendance log
     const attendanceEntry = {
@@ -113,7 +113,7 @@ exports.scanAttendance = async (req, res) => {
         branch: user.branch,
         year: user.year
       },
-      scannedAt: ticket.scannedAt,
+      scannedAt: ticket.attendedAt,
       totalAttendance: event.attendanceLog.length
     });
 
@@ -309,8 +309,8 @@ exports.exportAttendanceCSV = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to export attendance for this event' });
     }
 
-    // Create CSV header
-    let csv = 'Name,Email,Roll Number,Branch,Year,Status,Scanned At\n';
+    // Create CSV header (Simplified as requested: just name, email and status)
+    let csv = 'Name,Email,Status,Scanned At\n';
 
     // Get scanned status for each participant
     for (const participant of event.participants) {
@@ -319,16 +319,13 @@ exports.exportAttendanceCSV = async (req, res) => {
         t => t.eventId.toString() === eventId
       );
 
-      const status = ticket?.scanned ? 'Present' : 'Absent';
-      const scannedAt = ticket?.scannedAt
-        ? new Date(ticket.scannedAt).toLocaleString()
+      const status = ticket?.attended ? 'Present' : 'Absent';
+      const scannedAt = ticket?.attendedAt
+        ? new Date(ticket.attendedAt).toLocaleString()
         : 'N/A';
 
       csv += `"${participant.firstName} ${participant.lastName}",`;
       csv += `"${participant.email}",`;
-      csv += `"${participant.rollNumber || 'N/A'}",`;
-      csv += `"${participant.branch || 'N/A'}",`;
-      csv += `"${participant.year || 'N/A'}",`;
       csv += `"${status}",`;
       csv += `"${scannedAt}"\n`;
     }
@@ -378,8 +375,8 @@ exports.manualAttendance = async (req, res) => {
 
     if (action === 'mark') {
       // Mark as present
-      ticket.scanned = true;
-      ticket.scannedAt = new Date();
+      ticket.attended = true;
+      ticket.attendedAt = new Date();
       await user.save();
 
       // Add to attendance log
@@ -406,8 +403,8 @@ exports.manualAttendance = async (req, res) => {
 
     } else if (action === 'unmark') {
       // Unmark as present
-      ticket.scanned = false;
-      ticket.scannedAt = null;
+      ticket.attended = false;
+      ticket.attendedAt = null;
       await user.save();
 
       // Remove from attendance log

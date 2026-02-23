@@ -98,8 +98,8 @@ const OrganizerDashboard = () => {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
         const [eventRes, profileRes] = await Promise.all([
-          axios.get('${API_BASE_URL}/api/events/my-events', config),
-          axios.get('${API_BASE_URL}/api/users/profile', config)
+          axios.get(`${API_BASE_URL}/api/events/my-events`, config),
+          axios.get(`${API_BASE_URL}/api/users/profile`, config)
         ]);
         setMyEvents(eventRes.data);
         console.log('Profile data:', profileRes.data);
@@ -172,7 +172,7 @@ const OrganizerDashboard = () => {
 
         // Check for scanned tickets
         const scannedTickets = firstParticipant.eventTickets?.filter(t =>
-          t.eventId?.toString() === eventId && t.scanned
+          t.eventId?.toString() === eventId && t.attended
         );
         console.log('✅ Scanned tickets for this event:', scannedTickets);
       }
@@ -184,7 +184,7 @@ const OrganizerDashboard = () => {
       await fetchAttendanceData(eventId);
 
       // Also refresh the main event list to keep participant counts in sync
-      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
+      const eventRes = await axios.get(`${API_BASE_URL}/api/events/my-events`, config);
       setMyEvents(eventRes.data);
     } catch (err) {
       console.error("Error fetching event details:", err);
@@ -232,12 +232,12 @@ const OrganizerDashboard = () => {
         // Use attendance API data
         const scannedParticipant = attendanceData.scannedParticipants?.find(sp => sp.email === p.email);
         hasScanned = !!scannedParticipant;
-        scannedAt = scannedParticipant?.scannedAt ? new Date(scannedParticipant.scannedAt).toLocaleString() : 'N/A';
+        scannedAt = scannedParticipant?.scannedAt ? new Date(scannedParticipant.attendedAt).toLocaleString() : 'N/A';
       } else {
         // Fallback to eventTickets
         const ticket = p.eventTickets?.find(t => t.eventId?.toString() === selectedEventDetails._id);
-        hasScanned = ticket?.scanned;
-        scannedAt = ticket?.scannedAt ? new Date(ticket.scannedAt).toLocaleString() : 'N/A';
+        hasScanned = ticket?.attended;
+        scannedAt = ticket?.attendedAt ? new Date(ticket.attendedAt).toLocaleString() : 'N/A';
       }
 
       return [
@@ -436,7 +436,7 @@ const OrganizerDashboard = () => {
       alert('🎉 Event Published Successfully!');
 
       // Refresh events list
-      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
+      const eventRes = await axios.get(`${API_BASE_URL}/api/events/my-events`, config);
       setMyEvents(eventRes.data);
 
       // Refresh the current event details
@@ -550,7 +550,7 @@ const OrganizerDashboard = () => {
 
       // Refresh event details and list
       await fetchEventDetails(event._id);
-      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
+      const eventRes = await axios.get(`${API_BASE_URL}/api/events/my-events`, config);
       setMyEvents(eventRes.data);
 
     } catch (err) {
@@ -663,7 +663,7 @@ const OrganizerDashboard = () => {
       formData.append('image', file);
 
       // Step 1: Decode the QR code from image
-      const { data: qrData } = await axios.post('${API_BASE_URL}/api/events/scan-qr', formData, config);
+      const { data: qrData } = await axios.post(`${API_BASE_URL}/api/events/scan-qr`, formData, config);
 
       if (!qrData.success || !qrData.payload) {
         setScanError('No QR code found in the uploaded image. Please try again.');
@@ -748,7 +748,7 @@ const OrganizerDashboard = () => {
         const formData = new FormData();
         formData.append('image', blob, 'frame.png');
 
-        const { data: qrData } = await axios.post('${API_BASE_URL}/api/events/scan-qr', formData, config);
+        const { data: qrData } = await axios.post(`${API_BASE_URL}/api/events/scan-qr`, formData, config);
 
         if (qrData.success && qrData.payload && qrData.payload.ticketId) {
           // QR found! Stop scanning and verify
@@ -895,7 +895,7 @@ const OrganizerDashboard = () => {
         };
       }
 
-      await axios.post('${API_BASE_URL}/api/events', eventData, config);
+      await axios.post(`${API_BASE_URL}/api/events`, eventData, config);
 
       alert(status === 'Draft' ? "💾 Event Saved as Draft!" : "🎉 Event Published Successfully!");
 
@@ -922,7 +922,7 @@ const OrganizerDashboard = () => {
       setCustomFields([]);
 
       // Refresh events list
-      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
+      const eventRes = await axios.get(`${API_BASE_URL}/api/events/my-events`, config);
       setMyEvents(eventRes.data);
 
       // Switch to published events tab
@@ -939,12 +939,12 @@ const OrganizerDashboard = () => {
   const handleSaveProfile = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.put('${API_BASE_URL}/api/users/profile', profileData, config);
+      await axios.put(`${API_BASE_URL}/api/users/profile`, profileData, config);
       alert('✅ Profile updated successfully!');
       setIsEditingProfile(false);
 
       // Refresh profile data
-      const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
+      const profileRes = await axios.get(`${API_BASE_URL}/api/users/profile`, config);
       setProfileData({
         organizerName: profileRes.data.organizerName || '',
         category: profileRes.data.category || '',
@@ -969,12 +969,12 @@ const OrganizerDashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post('${API_BASE_URL}/api/auth/request-reset', { reason: profileData.resetReason }, config);
+      await axios.post(`${API_BASE_URL}/api/auth/request-reset`, { reason: profileData.resetReason }, config);
 
       alert("✅ Password reset request sent to Admin!");
 
       // Refresh to show pending status
-      const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
+      const profileRes = await axios.get(`${API_BASE_URL}/api/users/profile`, config);
       setProfileData(prev => ({
         ...prev,
         resetStatus: profileRes.data.resetRequest?.status,
@@ -2188,7 +2188,7 @@ const OrganizerDashboard = () => {
                       attendedMembers = selectedEventDetails.participants?.filter(p => {
                         const isTeamMember = allMembers.includes(p.email);
                         const hasScannedTicket = p.eventTickets?.some(t =>
-                          t.eventId?.toString() === selectedEventDetails._id && t.scanned
+                          t.eventId?.toString() === selectedEventDetails._id && t.attended
                         );
                         return isTeamMember && hasScannedTicket;
                       }).length || 0;
@@ -2392,10 +2392,10 @@ const OrganizerDashboard = () => {
                   {selectedEventDetails.participants && selectedEventDetails.participants.length > 0 && (
                     <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
                       <div style={{ padding: '8px 16px', borderRadius: '8px', background: '#4caf50', color: 'white', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                        ✅ Attended: {selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length}
+                        ✅ Attended: {selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.attended)).length}
                       </div>
                       <div style={{ padding: '8px 16px', borderRadius: '8px', background: '#ff9800', color: 'white', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                        ⏳ Not Yet: {selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length}
+                        ⏳ Not Yet: {selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.attended)).length}
                       </div>
                       <button
                         onClick={exportAttendanceCSV}
@@ -2455,7 +2455,7 @@ const OrganizerDashboard = () => {
                         transition: 'all 0.3s ease'
                       }}
                     >
-                      ✅ Attended ({attendanceData ? attendanceData.totalScanned : selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length})
+                      ✅ Attended ({attendanceData ? attendanceData.totalScanned : selectedEventDetails.participants.filter(p => p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.attended)).length})
                     </button>
                     <button
                       onClick={() => setAttendanceFilter('notYet')}
@@ -2471,7 +2471,7 @@ const OrganizerDashboard = () => {
                         transition: 'all 0.3s ease'
                       }}
                     >
-                      ⏳ Not Yet Arrived ({attendanceData ? attendanceData.totalNotScanned : selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.scanned)).length})
+                      ⏳ Not Yet Arrived ({attendanceData ? attendanceData.totalNotScanned : selectedEventDetails.participants.filter(p => !p.eventTickets?.some(t => t.eventId?.toString() === selectedEventDetails._id && t.attended)).length})
                     </button>
                   </div>
                 )}
@@ -2500,7 +2500,7 @@ const OrganizerDashboard = () => {
                             } else {
                               // Fallback to eventTickets
                               hasScanned = p.eventTickets?.some(t =>
-                                t.eventId?.toString() === selectedEventDetails._id && t.scanned
+                                t.eventId?.toString() === selectedEventDetails._id && t.attended
                               );
                             }
 

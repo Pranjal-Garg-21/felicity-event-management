@@ -15,8 +15,8 @@ const TeamManagement = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const [teamsRes, invitesRes] = await Promise.all([
-        axios.get('${API_BASE_URL}/api/teams/my-teams', config),
-        axios.get('${API_BASE_URL}/api/teams/invitations', config)
+        axios.get(`${API_BASE_URL}/api/teams/my-teams`, config),
+        axios.get(`${API_BASE_URL}/api/teams/invitations`, config)
       ]);
       setMyTeams(teamsRes.data);
 

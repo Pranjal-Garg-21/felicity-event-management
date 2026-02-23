@@ -21,11 +21,11 @@ const Onboarding = () => {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
       // Fetch all organizers
-      const organizersRes = await axios.get('${API_BASE_URL}/api/users/organizers', config);
+      const organizersRes = await axios.get(`${API_BASE_URL}/api/users/organizers`, config);
       setOrganizers(organizersRes.data);
 
       // Fetch user's profile to get existing interests and followed clubs
-      const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
+      const profileRes = await axios.get(`${API_BASE_URL}/api/users/profile`, config);
 
       console.log('User profile data:', profileRes.data);
       console.log('Followed clubs from profile:', profileRes.data.followedClubs);
@@ -62,7 +62,7 @@ const Onboarding = () => {
   const handleFinish = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.put('${API_BASE_URL}/api/users/update-onboarding', {
+      const { data } = await axios.put(`${API_BASE_URL}/api/users/update-onboarding`, {
         interests: selectedInterests,
         followedClubs,
         hasCompletedOnboarding: true
@@ -92,7 +92,7 @@ const Onboarding = () => {
   const handleSkip = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.put('${API_BASE_URL}/api/users/update-onboarding', {
+      await axios.put(`${API_BASE_URL}/api/users/update-onboarding`, {
         interests: [],
         followedClubs: [],
         hasCompletedOnboarding: true

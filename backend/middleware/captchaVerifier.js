@@ -11,8 +11,19 @@ const GOOGLE_TEST_SECRET_KEY = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe';
  * Validates the "I'm not a robot" checkbox response with Google's API
  */
 const verifyCaptcha = async (req, res, next) => {
-    // Skip CAPTCHA if disabled
-    if (!securityConfig.recaptcha.enabled) {
+    // Debug log to file
+    const fs = require('fs');
+    const logAttempt = (msg) => {
+        const entry = `[${new Date().toISOString()}] CAPTCHA: ${msg}\n`;
+        fs.appendFileSync('captcha_debug.log', entry);
+        console.log(`🤖 ${msg}`);
+    };
+
+    // Skip CAPTCHA if disabled or if it's localhost
+    const isLocalhost = req.headers.host?.includes('localhost') || req.connection.remoteAddress === '::1' || req.connection.remoteAddress === '127.0.0.1';
+
+    if (!securityConfig.recaptcha.enabled || isLocalhost) {
+        logAttempt(`Skipping CAPTCHA verification (${isLocalhost ? 'Localhost' : 'Disabled'})`);
         return next();
     }
 
@@ -24,13 +35,11 @@ const verifyCaptcha = async (req, res, next) => {
 
     if (!captchaToken) {
         if (isTestMode) {
-            // In test/dev mode, allow through without token
-            console.log('🤖 CAPTCHA: Test mode - no token provided, allowing through');
-            await logFromRequest(req, 'captcha_failed', 'allowed', 'No CAPTCHA token (test mode)');
+            logAttempt('Test mode - no token provided, allowing through');
             return next();
         }
 
-        await logFromRequest(req, 'captcha_failed', 'blocked', 'No CAPTCHA token provided');
+        logAttempt('Blocked: No token provided');
         return res.status(400).json({
             message: 'Please complete the CAPTCHA verification ("I\'m not a robot" checkbox).'
         });
@@ -49,16 +58,13 @@ const verifyCaptcha = async (req, res, next) => {
 
         const { success, 'error-codes': errorCodes } = response.data;
 
-        console.log(`🤖 CAPTCHA v2 Result: success=${success}`);
-        if (!success) {
-            console.log(`🤖 CAPTCHA Error Codes: ${JSON.stringify(errorCodes)}`);
-            console.log(`🤖 CAPTCHA Secret Key used: ${securityConfig.recaptcha.secretKey.substring(0, 10)}...`);
-        }
+        logAttempt(`Result: success=${success}${!success ? ` | Error Codes: ${JSON.stringify(errorCodes)}` : ''}`);
+        logAttempt(`Secret Key used: ${securityConfig.recaptcha.secretKey.substring(0, 10)}...`);
 
         if (!success) {
             // In test mode, allow anyway
             if (isTestMode) {
-                console.log('🤖 CAPTCHA: Test mode - verification failed but allowing through');
+                logAttempt('Test mode - verification failed but allowing through');
                 return next();
             }
 

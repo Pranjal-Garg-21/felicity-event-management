@@ -263,7 +263,7 @@ const QRScanner = () => {
 
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.post(
-        '${API_BASE_URL}/api/attendance/scan',
+        `${API_BASE_URL}/api/attendance/scan`,
         { ticketId: ticketId.trim(), eventId, scanMethod },
         config
       );
@@ -362,7 +362,7 @@ const QRScanner = () => {
           };
 
           const { data } = await axios.post(
-            '${API_BASE_URL}/api/attendance/scan-file',
+            `${API_BASE_URL}/api/attendance/scan-file`,
             {
               qrData: code.data,
               eventId
@@ -439,7 +439,7 @@ const QRScanner = () => {
       }
 
       const { data } = await axios.post(
-        '${API_BASE_URL}/api/attendance/manual',
+        `${API_BASE_URL}/api/attendance/manual`,
         {
           userId: participant._id,
           eventId,

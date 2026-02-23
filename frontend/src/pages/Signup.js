@@ -62,7 +62,7 @@ const Signup = () => {
     setIsSubmitting(true);
 
     try {
-      await axios.post('${API_BASE_URL}/api/auth/register', {
+      await axios.post(`${API_BASE_URL}/api/auth/register`, {
         ...formData,
         captchaToken
       });
