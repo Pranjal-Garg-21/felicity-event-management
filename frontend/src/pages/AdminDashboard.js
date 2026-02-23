@@ -2,6 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import API_BASE_URL from '../config/api';
+
 
 const AdminDashboard = () => {
   const { user, logout } = useContext(AuthContext);
@@ -42,7 +44,7 @@ const AdminDashboard = () => {
   const fetchOrganizers = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('http://localhost:5000/api/admin/organizers', config);
+      const { data } = await axios.get('${API_BASE_URL}/api/admin/organizers', config);
       setOrganizers(data);
     } catch (err) {
       console.error("Error fetching organizers", err);
@@ -52,7 +54,7 @@ const AdminDashboard = () => {
   const fetchAllEvents = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('http://localhost:5000/api/admin/all-events', config);
+      const { data } = await axios.get('${API_BASE_URL}/api/admin/all-events', config);
       setAllEvents(data);
     } catch (err) {
       console.error("Error fetching all events", err);
@@ -63,7 +65,7 @@ const AdminDashboard = () => {
   const fetchResetRequests = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('http://localhost:5000/api/admin/reset-requests', config);
+      const { data } = await axios.get('${API_BASE_URL}/api/admin/reset-requests', config);
       setResetRequests(data);
     } catch (err) {
       console.error("Error fetching reset requests", err);
@@ -80,7 +82,7 @@ const AdminDashboard = () => {
       if (securityFilter.ipAddress) params.ipAddress = securityFilter.ipAddress;
       if (securityFilter.email) params.email = securityFilter.email;
 
-      const { data } = await axios.get('http://localhost:5000/api/security/events', { ...config, params });
+      const { data } = await axios.get('${API_BASE_URL}/api/security/events', { ...config, params });
       setSecurityEvents(data.events);
       setSecurityPagination(data.pagination);
     } catch (err) {
@@ -93,7 +95,7 @@ const AdminDashboard = () => {
   const fetchSecurityStats = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('http://localhost:5000/api/security/stats', config);
+      const { data } = await axios.get('${API_BASE_URL}/api/security/stats', config);
       setSecurityStats(data);
     } catch (err) {
       console.error('Error fetching security stats:', err);
@@ -103,7 +105,7 @@ const AdminDashboard = () => {
   const fetchBlockedIPs = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get('http://localhost:5000/api/security/blocked-ips', config);
+      const { data } = await axios.get('${API_BASE_URL}/api/security/blocked-ips', config);
       setBlockedIPs(data);
     } catch (err) {
       console.error('Error fetching blocked IPs:', err);
@@ -114,7 +116,7 @@ const AdminDashboard = () => {
     e.preventDefault();
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post('http://localhost:5000/api/security/block-ip', blockIPForm, config);
+      await axios.post('${API_BASE_URL}/api/security/block-ip', blockIPForm, config);
       alert(`✅ IP ${blockIPForm.ipAddress} blocked!`);
       setBlockIPForm({ ipAddress: '', reason: '', duration: 24 });
       fetchBlockedIPs();
@@ -128,7 +130,7 @@ const AdminDashboard = () => {
     if (window.confirm(`Unblock IP ${ip}?`)) {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        await axios.delete(`http://localhost:5000/api/security/unblock-ip/${ip}`, config);
+        await axios.delete(`${API_BASE_URL}/api/security/unblock-ip/${ip}`, config);
         alert(`✅ IP ${ip} unblocked!`);
         fetchBlockedIPs();
         fetchSecurityStats();
@@ -157,7 +159,7 @@ const AdminDashboard = () => {
   const handleResetAction = async (userId, action) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.post('http://localhost:5000/api/admin/handle-reset', { userId, action }, config);
+      const { data } = await axios.post('${API_BASE_URL}/api/admin/handle-reset', { userId, action }, config);
 
       if (action === 'approve' && data.generatedPassword) {
         setResetCredentials({
@@ -189,7 +191,7 @@ const AdminDashboard = () => {
         manualPassword: useManualPassword ? formData.manualPassword : null
       };
 
-      const { data } = await axios.post('http://localhost:5000/api/admin/create-organizer', payload, config);
+      const { data } = await axios.post('${API_BASE_URL}/api/admin/create-organizer', payload, config);
 
       // Show credentials modal
       setNewCredentials({
@@ -215,7 +217,7 @@ const AdminDashboard = () => {
     if (window.confirm("Are you sure you want to remove this club? All their events will also be deleted.")) {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        await axios.delete(`http://localhost:5000/api/admin/organizer/${id}`, config);
+        await axios.delete(`${API_BASE_URL}/api/admin/organizer/${id}`, config);
         alert("✅ Club removed successfully");
         fetchOrganizers();
         fetchAllEvents(); // Refresh events list
@@ -229,7 +231,7 @@ const AdminDashboard = () => {
     if (window.confirm("Are you sure you want to delete this event?")) {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        await axios.delete(`http://localhost:5000/api/admin/event/${eventId}`, config);
+        await axios.delete(`${API_BASE_URL}/api/admin/event/${eventId}`, config);
         alert("✅ Event deleted successfully");
         fetchAllEvents();
       } catch (err) {

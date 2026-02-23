@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
+import API_BASE_URL from '../config/api';
+
 
 const TeamManagement = () => {
   const { user } = useContext(AuthContext);
@@ -13,8 +15,8 @@ const TeamManagement = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const [teamsRes, invitesRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/teams/my-teams', config),
-        axios.get('http://localhost:5000/api/teams/invitations', config)
+        axios.get('${API_BASE_URL}/api/teams/my-teams', config),
+        axios.get('${API_BASE_URL}/api/teams/invitations', config)
       ]);
       setMyTeams(teamsRes.data);
 
@@ -53,7 +55,7 @@ const TeamManagement = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.post(
-        `http://localhost:5000/api/teams/join/${inviteCode}`,
+        `${API_BASE_URL}/api/teams/join/${inviteCode}`,
         {},
         config
       );
@@ -75,7 +77,7 @@ const TeamManagement = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       await axios.post(
-        `http://localhost:5000/api/teams/decline/${inviteCode}`,
+        `${API_BASE_URL}/api/teams/decline/${inviteCode}`,
         {},
         config
       );
@@ -94,7 +96,7 @@ const TeamManagement = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.delete(`http://localhost:5000/api/teams/cancel/${teamId}`, config);
+      await axios.delete(`${API_BASE_URL}/api/teams/cancel/${teamId}`, config);
       alert('Team cancelled successfully');
       fetchData();
     } catch (err) {

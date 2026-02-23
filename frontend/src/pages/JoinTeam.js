@@ -2,6 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
+import API_BASE_URL from '../config/api';
+
 
 const JoinTeam = () => {
   const { inviteCode } = useParams();
@@ -25,7 +27,7 @@ const JoinTeam = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.post(
-        `http://localhost:5000/api/teams/join/${inviteCode}`,
+        `${API_BASE_URL}/api/teams/join/${inviteCode}`,
         {},
         config
       );
@@ -76,7 +78,7 @@ const JoinTeam = () => {
     const fetchTeamPreview = async () => {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        const { data } = await axios.get(`http://localhost:5000/api/teams/details/${inviteCode}`, config);
+        const { data } = await axios.get(`${API_BASE_URL}/api/teams/details/${inviteCode}`, config);
         setTeamPreview(data);
         setStatus('preview_ready');
         setLoading(false);

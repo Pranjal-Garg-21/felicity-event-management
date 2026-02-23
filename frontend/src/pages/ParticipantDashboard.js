@@ -3,6 +3,8 @@ import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import DiscussionForum from '../components/DiscussionForum';
+import API_BASE_URL from '../config/api';
+
 
 const ParticipantDashboard = () => {
   const { user, logout, login } = useContext(AuthContext);
@@ -60,7 +62,7 @@ const ParticipantDashboard = () => {
     const fetchUserProfile = async () => {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        const { data } = await axios.get('http://localhost:5000/api/users/profile', config);
+        const { data } = await axios.get('${API_BASE_URL}/api/users/profile', config);
         setUserProfile(data);
       } catch (err) {
         console.error("Error fetching profile:", err);
@@ -80,14 +82,14 @@ const ParticipantDashboard = () => {
 
         // Fetch registered events and tickets separately so one failure doesn't block the other
         try {
-          const eventsRes = await axios.get('http://localhost:5000/api/events/my-registrations', config);
+          const eventsRes = await axios.get('${API_BASE_URL}/api/events/my-registrations', config);
           setRegisteredEvents(eventsRes.data);
         } catch (err) {
           console.error("Error fetching registered events:", err);
         }
 
         try {
-          const ticketsRes = await axios.get('http://localhost:5000/api/users/my-tickets', config);
+          const ticketsRes = await axios.get('${API_BASE_URL}/api/users/my-tickets', config);
           setMyTickets(ticketsRes.data);
         } catch (err) {
           console.error("Error fetching tickets:", err);
@@ -107,7 +109,7 @@ const ParticipantDashboard = () => {
     const fetchNotifications = async () => {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        const { data } = await axios.get('http://localhost:5000/api/users/notifications', config);
+        const { data } = await axios.get('${API_BASE_URL}/api/users/notifications', config);
         setNotifications(data);
       } catch (err) {
         console.error('Error fetching notifications:', err);
@@ -133,9 +135,9 @@ const ParticipantDashboard = () => {
         };
 
         const [eventRes, orgRes, profileRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/events/all', config),
-          axios.get('http://localhost:5000/api/users/organizers', config),
-          axios.get('http://localhost:5000/api/users/profile', config)
+          axios.get('${API_BASE_URL}/api/events/all', config),
+          axios.get('${API_BASE_URL}/api/users/organizers', config),
+          axios.get('${API_BASE_URL}/api/users/profile', config)
         ]);
 
         const userInterests = profileRes.data.interests || [];
@@ -276,10 +278,10 @@ const ParticipantDashboard = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       // Sending follow/unfollow request to backend
-      await axios.post(`http://localhost:5000/api/users/follow/${orgId}`, {}, config);
+      await axios.post(`${API_BASE_URL}/api/users/follow/${orgId}`, {}, config);
 
       // Refresh user profile to sync followed clubs
-      const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
+      const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
       setUserProfile(profileRes.data);
 
       // Update user context with new followedClubs
@@ -289,7 +291,7 @@ const ParticipantDashboard = () => {
       login({ ...user, followedClubs: clubIds });
 
       // Refresh organizers list to get updated followers count
-      const orgRes = await axios.get('http://localhost:5000/api/users/organizers', config);
+      const orgRes = await axios.get('${API_BASE_URL}/api/users/organizers', config);
       setOrganizers(orgRes.data);
 
       console.log('Updated followed clubs:', clubIds);
@@ -373,7 +375,7 @@ const ParticipantDashboard = () => {
         requestData = { formResponses: customFormData };
       }
 
-      const { data } = await axios.post(`http://localhost:5000/api/events/register/${event._id}`, requestData, config);
+      const { data } = await axios.post(`${API_BASE_URL}/api/events/register/${event._id}`, requestData, config);
 
       // Show success message with ticket info
       let successMessage = `✅ ${data.message}\n\n📅 Event: ${data.event.eventName}\n🎭 Organizer: ${data.event.organizer}`;
@@ -389,20 +391,20 @@ const ParticipantDashboard = () => {
       setCustomFormData({});
 
       // Refresh events to update participant count - filter out drafts
-      const eventRes = await axios.get('http://localhost:5000/api/events/all', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/all', config);
       const visibleEvents = eventRes.data.filter(ev => ev.status !== 'Draft' && ev.status !== undefined);
       setEvents(visibleEvents);
 
       // Refresh registered events and tickets list separately so one failure doesn't block the other
       try {
-        const registeredRes = await axios.get('http://localhost:5000/api/events/my-registrations', config);
+        const registeredRes = await axios.get('${API_BASE_URL}/api/events/my-registrations', config);
         setRegisteredEvents(registeredRes.data);
       } catch (regErr) {
         console.error("Error refreshing registered events:", regErr);
       }
 
       try {
-        const ticketsRes = await axios.get('http://localhost:5000/api/users/my-tickets', config);
+        const ticketsRes = await axios.get('${API_BASE_URL}/api/users/my-tickets', config);
         setMyTickets(ticketsRes.data);
       } catch (tickErr) {
         console.error("Error refreshing tickets:", tickErr);
@@ -439,25 +441,25 @@ const ParticipantDashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.post(`http://localhost:5000/api/events/unregister/${event._id}`, {}, config);
+      const { data } = await axios.post(`${API_BASE_URL}/api/events/unregister/${event._id}`, {}, config);
 
       alert(`✅ ${data.message}`);
       setSelectedEvent(null);
 
       // Refresh all data
-      const eventRes = await axios.get('http://localhost:5000/api/events/all', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/all', config);
       const visibleEvents = eventRes.data.filter(ev => ev.status !== 'Draft' && ev.status !== undefined);
       setEvents(visibleEvents);
 
       try {
-        const registeredRes = await axios.get('http://localhost:5000/api/events/my-registrations', config);
+        const registeredRes = await axios.get('${API_BASE_URL}/api/events/my-registrations', config);
         setRegisteredEvents(registeredRes.data);
       } catch (regErr) {
         console.error("Error refreshing registered events:", regErr);
       }
 
       try {
-        const ticketsRes = await axios.get('http://localhost:5000/api/users/my-tickets', config);
+        const ticketsRes = await axios.get('${API_BASE_URL}/api/users/my-tickets', config);
         setMyTickets(ticketsRes.data);
       } catch (tickErr) {
         console.error("Error refreshing tickets:", tickErr);
@@ -552,7 +554,7 @@ const ParticipantDashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post(`http://localhost:5000/api/events/register-team/${selectedEvent._id}`, {
+      await axios.post(`${API_BASE_URL}/api/events/register-team/${selectedEvent._id}`, {
         ...teamFormData,
         totalFee,
         formResponses: customFormData
@@ -572,20 +574,20 @@ const ParticipantDashboard = () => {
       setSelectedEvent(null);
 
       // Refresh events - filter out drafts
-      const eventRes = await axios.get('http://localhost:5000/api/events/all', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/all', config);
       const visibleEvents = eventRes.data.filter(ev => ev.status !== 'Draft' && ev.status !== undefined);
       setEvents(visibleEvents);
 
       // Also refresh registered events and tickets
       try {
-        const registeredRes = await axios.get('http://localhost:5000/api/events/my-registrations', config);
+        const registeredRes = await axios.get('${API_BASE_URL}/api/events/my-registrations', config);
         setRegisteredEvents(registeredRes.data);
       } catch (regErr) {
         console.error("Error refreshing registered events:", regErr);
       }
 
       try {
-        const ticketsRes = await axios.get('http://localhost:5000/api/users/my-tickets', config);
+        const ticketsRes = await axios.get('${API_BASE_URL}/api/users/my-tickets', config);
         setMyTickets(ticketsRes.data);
       } catch (tickErr) {
         console.error("Error refreshing tickets:", tickErr);
@@ -664,7 +666,7 @@ const ParticipantDashboard = () => {
       }
 
       const { data } = await axios.post(
-        `http://localhost:5000/api/teams/create/${selectedEvent._id}`,
+        `${API_BASE_URL}/api/teams/create/${selectedEvent._id}`,
         requestData,
         config
       );
@@ -695,7 +697,7 @@ const ParticipantDashboard = () => {
       setCustomFormData({});
 
       // Refresh events
-      const eventRes = await axios.get('http://localhost:5000/api/events/all', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/all', config);
       const visibleEvents = eventRes.data.filter(ev => ev.status !== 'Draft' && ev.status !== undefined);
       setEvents(visibleEvents);
 
@@ -767,7 +769,7 @@ const ParticipantDashboard = () => {
   const handleMarkNotificationRead = async (notificationId) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.put(`http://localhost:5000/api/users/notifications/${notificationId}/read`, {}, config);
+      await axios.put(`${API_BASE_URL}/api/users/notifications/${notificationId}/read`, {}, config);
       setNotifications(prev =>
         prev.map(n => n._id === notificationId ? { ...n, read: true } : n)
       );
@@ -779,7 +781,7 @@ const ParticipantDashboard = () => {
   const handleDeleteNotification = async (notificationId) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.delete(`http://localhost:5000/api/users/notifications/${notificationId}`, config);
+      await axios.delete(`${API_BASE_URL}/api/users/notifications/${notificationId}`, config);
       setNotifications(prev => prev.filter(n => n._id !== notificationId));
     } catch (err) {
       console.error('Error deleting notification:', err);
@@ -808,7 +810,7 @@ const ParticipantDashboard = () => {
 
     try {
       await axios.post(
-        `http://localhost:5000/api/feedback/${feedbackEventId}`,
+        `${API_BASE_URL}/api/feedback/${feedbackEventId}`,
         { rating: feedbackRating, comment: feedbackComment },
         config
       );
@@ -916,10 +918,10 @@ const ParticipantDashboard = () => {
               setActiveTab('myevents');
               // Refresh registered events when switching to My Events tab
               const config = { headers: { Authorization: `Bearer ${user.token}` } };
-              axios.get('http://localhost:5000/api/events/my-registrations', config)
+              axios.get('${API_BASE_URL}/api/events/my-registrations', config)
                 .then(res => setRegisteredEvents(res.data))
                 .catch(err => console.error("Error refreshing registered events:", err));
-              axios.get('http://localhost:5000/api/users/my-tickets', config)
+              axios.get('${API_BASE_URL}/api/users/my-tickets', config)
                 .then(res => setMyTickets(res.data))
                 .catch(err => console.error("Error refreshing tickets:", err));
             }}
@@ -1790,7 +1792,7 @@ const ParticipantDashboard = () => {
                               try {
                                 // Find the invite code from user's teamInvites
                                 const config = { headers: { Authorization: `Bearer ${user.token}` } };
-                                const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
+                                const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
                                 const teamInvite = profileRes.data.teamInvites?.find(
                                   inv => inv.eventId === notification.eventId && inv.status === 'Pending'
                                 );
@@ -1827,18 +1829,18 @@ const ParticipantDashboard = () => {
 
                               try {
                                 const config = { headers: { Authorization: `Bearer ${user.token}` } };
-                                const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
+                                const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
                                 const teamInvite = profileRes.data.teamInvites?.find(
                                   inv => inv.eventId === notification.eventId && inv.status === 'Pending'
                                 );
 
                                 if (teamInvite) {
-                                  await axios.post(`http://localhost:5000/api/teams/decline/${teamInvite.inviteCode}`, {}, config);
+                                  await axios.post(`${API_BASE_URL}/api/teams/decline/${teamInvite.inviteCode}`, {}, config);
                                   alert('Team invitation declined');
                                   // Mark notification as read
                                   handleMarkNotificationRead(notification._id);
                                   // Refresh notifications
-                                  const { data } = await axios.get('http://localhost:5000/api/users/notifications', config);
+                                  const { data } = await axios.get('${API_BASE_URL}/api/users/notifications', config);
                                   setNotifications(data);
                                 } else {
                                   alert('This invitation is no longer available');

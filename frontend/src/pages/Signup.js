@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import API_BASE_URL from '../config/api';
+
 
 const RECAPTCHA_SITE_KEY = process.env.REACT_APP_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
 
@@ -60,7 +62,7 @@ const Signup = () => {
     setIsSubmitting(true);
 
     try {
-      await axios.post('http://localhost:5000/api/auth/register', {
+      await axios.post('${API_BASE_URL}/api/auth/register', {
         ...formData,
         captchaToken
       });

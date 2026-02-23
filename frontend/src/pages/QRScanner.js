@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
 import jsQR from 'jsqr';
+import API_BASE_URL from '../config/api';
+
 
 const QRScanner = () => {
   const { eventId } = useParams();
@@ -29,7 +31,7 @@ const QRScanner = () => {
   const fetchEventDetails = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get(`http://localhost:5000/api/events/${eventId}`, config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/events/${eventId}`, config);
       setEvent(data);
     } catch (error) {
       console.error('Error fetching event:', error);
@@ -41,7 +43,7 @@ const QRScanner = () => {
     try {
       console.log('Fetching attendance dashboard for event:', eventId);
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get(`http://localhost:5000/api/attendance/event/${eventId}`, config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/attendance/event/${eventId}`, config);
 
       console.log('Attendance data received:', {
         totalRegistered: data.totalRegistered,
@@ -261,7 +263,7 @@ const QRScanner = () => {
 
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.post(
-        'http://localhost:5000/api/attendance/scan',
+        '${API_BASE_URL}/api/attendance/scan',
         { ticketId: ticketId.trim(), eventId, scanMethod },
         config
       );
@@ -360,7 +362,7 @@ const QRScanner = () => {
           };
 
           const { data } = await axios.post(
-            'http://localhost:5000/api/attendance/scan-file',
+            '${API_BASE_URL}/api/attendance/scan-file',
             {
               qrData: code.data,
               eventId
@@ -437,7 +439,7 @@ const QRScanner = () => {
       }
 
       const { data } = await axios.post(
-        'http://localhost:5000/api/attendance/manual',
+        '${API_BASE_URL}/api/attendance/manual',
         {
           userId: participant._id,
           eventId,
@@ -465,7 +467,7 @@ const QRScanner = () => {
         responseType: 'blob'
       };
       const { data } = await axios.get(
-        `http://localhost:5000/api/attendance/export/${eventId}`,
+        `${API_BASE_URL}/api/attendance/export/${eventId}`,
         config
       );
 

@@ -2,6 +2,8 @@ import React, { useState, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import API_BASE_URL from '../config/api';
+
 
 const CreateEvent = () => {
   const { user } = useContext(AuthContext);
@@ -28,7 +30,7 @@ const CreateEvent = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       // Sending all required attributes to the backend
-      await axios.post('http://localhost:5000/api/events', {
+      await axios.post('${API_BASE_URL}/api/events', {
         ...formData,
         customFormFields: customFields 
       }, config);

@@ -2,8 +2,9 @@ import React, { useState, useContext, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
+import { API_ENDPOINTS } from '../config/api';
 
-const RECAPTCHA_SITE_KEY = process.env.REACT_APP_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+const RECAPTCHA_SITE_KEY = process.env.REACT_APP_RECAPTCHA_SITE_KEY || '6LcLkm4sAAAAAPS0gpLUg1aHYvR2gn39xDEGxSnr';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -69,7 +70,7 @@ const Login = () => {
     setIsSubmitting(true);
 
     try {
-      const { data } = await axios.post('http://localhost:5000/api/auth/login', {
+      const { data } = await axios.post(API_ENDPOINTS.AUTH.LOGIN, {
         email,
         password,
         expectedRole: role,

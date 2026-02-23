@@ -50,6 +50,10 @@ const verifyCaptcha = async (req, res, next) => {
         const { success, 'error-codes': errorCodes } = response.data;
 
         console.log(`🤖 CAPTCHA v2 Result: success=${success}`);
+        if (!success) {
+            console.log(`🤖 CAPTCHA Error Codes: ${JSON.stringify(errorCodes)}`);
+            console.log(`🤖 CAPTCHA Secret Key used: ${securityConfig.recaptcha.secretKey.substring(0, 10)}...`);
+        }
 
         if (!success) {
             // In test mode, allow anyway

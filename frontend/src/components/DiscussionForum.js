@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import axios from 'axios';
+import API_BASE_URL from '../config/api';
+
 
 const DiscussionForum = ({ eventId, isOrganizer }) => {
   const { user } = useContext(AuthContext);
@@ -18,7 +20,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
   const fetchMessages = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get(`http://localhost:5000/api/forum/${eventId}`, config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/forum/${eventId}`, config);
       setMessages(data.messages);
       setLoading(false);
       
@@ -38,7 +40,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.get(
-        `http://localhost:5000/api/forum/${eventId}/unread?lastViewed=${lastViewed}`,
+        `${API_BASE_URL}/api/forum/${eventId}/unread?lastViewed=${lastViewed}`,
         config
       );
       setUnreadCount(data.unreadCount);
@@ -52,7 +54,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data } = await axios.get(
-        `http://localhost:5000/api/forum/message/${messageId}/replies`,
+        `${API_BASE_URL}/api/forum/message/${messageId}/replies`,
         config
       );
       setReplies(prev => ({ ...prev, [messageId]: data }));
@@ -69,7 +71,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       await axios.post(
-        `http://localhost:5000/api/forum/${eventId}`,
+        `${API_BASE_URL}/api/forum/${eventId}`,
         {
           content: newMessage,
           type: messageType,
@@ -98,7 +100,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       await axios.post(
-        `http://localhost:5000/api/forum/message/${messageId}/react`,
+        `${API_BASE_URL}/api/forum/message/${messageId}/react`,
         { reactionType },
         config
       );
@@ -113,7 +115,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       await axios.delete(
-        `http://localhost:5000/api/forum/message/${messageId}/react`,
+        `${API_BASE_URL}/api/forum/message/${messageId}/react`,
         config
       );
       fetchMessages();
@@ -127,7 +129,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       await axios.put(
-        `http://localhost:5000/api/forum/message/${messageId}/pin`,
+        `${API_BASE_URL}/api/forum/message/${messageId}/pin`,
         {},
         config
       );
@@ -145,7 +147,7 @@ const DiscussionForum = ({ eventId, isOrganizer }) => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
       await axios.delete(
-        `http://localhost:5000/api/forum/message/${messageId}`,
+        `${API_BASE_URL}/api/forum/message/${messageId}`,
         config
       );
       fetchMessages();

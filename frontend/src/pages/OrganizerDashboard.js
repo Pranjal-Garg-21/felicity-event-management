@@ -3,6 +3,8 @@ import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import DiscussionForum from '../components/DiscussionForum';
+import API_BASE_URL from '../config/api';
+
 
 const OrganizerDashboard = () => {
   const { user, logout } = useContext(AuthContext);
@@ -96,8 +98,8 @@ const OrganizerDashboard = () => {
       try {
         const config = { headers: { Authorization: `Bearer ${user.token}` } };
         const [eventRes, profileRes] = await Promise.all([
-          axios.get('http://localhost:5000/api/events/my-events', config),
-          axios.get('http://localhost:5000/api/users/profile', config)
+          axios.get('${API_BASE_URL}/api/events/my-events', config),
+          axios.get('${API_BASE_URL}/api/users/profile', config)
         ]);
         setMyEvents(eventRes.data);
         console.log('Profile data:', profileRes.data);
@@ -156,7 +158,7 @@ const OrganizerDashboard = () => {
     try {
       console.log('🔄 Fetching event details for eventId:', eventId);
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get(`http://localhost:5000/api/events/${eventId}`, config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/events/${eventId}`, config);
 
       console.log('📊 Event data received:', data.name);
       console.log('👥 Participants count:', data.participants?.length);
@@ -182,7 +184,7 @@ const OrganizerDashboard = () => {
       await fetchAttendanceData(eventId);
 
       // Also refresh the main event list to keep participant counts in sync
-      const eventRes = await axios.get('http://localhost:5000/api/events/my-events', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
       setMyEvents(eventRes.data);
     } catch (err) {
       console.error("Error fetching event details:", err);
@@ -195,7 +197,7 @@ const OrganizerDashboard = () => {
     try {
       console.log('📊 Fetching attendance data from attendance API for:', eventId);
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      const { data } = await axios.get(`http://localhost:5000/api/attendance/event/${eventId}`, config);
+      const { data } = await axios.get(`${API_BASE_URL}/api/attendance/event/${eventId}`, config);
 
       console.log('✅ Attendance data received:', {
         totalScanned: data.totalScanned,
@@ -339,8 +341,8 @@ const OrganizerDashboard = () => {
       console.log('📊 Making API calls...');
 
       const [feedbackRes, statsRes] = await Promise.all([
-        axios.get(`http://localhost:5000/api/feedback/event/${eventId}`, { ...config, params }),
-        axios.get(`http://localhost:5000/api/feedback/event/${eventId}/stats`, config)
+        axios.get(`${API_BASE_URL}/api/feedback/event/${eventId}`, { ...config, params }),
+        axios.get(`${API_BASE_URL}/api/feedback/event/${eventId}/stats`, config)
       ]);
 
       console.log('📊 API Response - Feedback:', feedbackRes.data);
@@ -367,7 +369,7 @@ const OrganizerDashboard = () => {
       };
 
       const response = await axios.get(
-        `http://localhost:5000/api/feedback/event/${eventId}/export`,
+        `${API_BASE_URL}/api/feedback/event/${eventId}/export`,
         config
       );
 
@@ -426,7 +428,7 @@ const OrganizerDashboard = () => {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
 
       // Update event status to Published
-      await axios.put(`http://localhost:5000/api/events/${eventId}`,
+      await axios.put(`${API_BASE_URL}/api/events/${eventId}`,
         { status: 'Published' },
         config
       );
@@ -434,7 +436,7 @@ const OrganizerDashboard = () => {
       alert('🎉 Event Published Successfully!');
 
       // Refresh events list
-      const eventRes = await axios.get('http://localhost:5000/api/events/my-events', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
       setMyEvents(eventRes.data);
 
       // Refresh the current event details
@@ -453,7 +455,7 @@ const OrganizerDashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post(`http://localhost:5000/api/events/cancel/${eventId}`, {}, config);
+      await axios.post(`${API_BASE_URL}/api/events/cancel/${eventId}`, {}, config);
 
       alert("✅ Event has been cancelled successfully.");
 
@@ -538,7 +540,7 @@ const OrganizerDashboard = () => {
       }
 
       const { data } = await axios.put(
-        `http://localhost:5000/api/events/${event._id}`,
+        `${API_BASE_URL}/api/events/${event._id}`,
         updates,
         config
       );
@@ -548,7 +550,7 @@ const OrganizerDashboard = () => {
 
       // Refresh event details and list
       await fetchEventDetails(event._id);
-      const eventRes = await axios.get('http://localhost:5000/api/events/my-events', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
       setMyEvents(eventRes.data);
 
     } catch (err) {
@@ -661,7 +663,7 @@ const OrganizerDashboard = () => {
       formData.append('image', file);
 
       // Step 1: Decode the QR code from image
-      const { data: qrData } = await axios.post('http://localhost:5000/api/events/scan-qr', formData, config);
+      const { data: qrData } = await axios.post('${API_BASE_URL}/api/events/scan-qr', formData, config);
 
       if (!qrData.success || !qrData.payload) {
         setScanError('No QR code found in the uploaded image. Please try again.');
@@ -689,7 +691,7 @@ const OrganizerDashboard = () => {
 
       const verifyConfig = { headers: { Authorization: `Bearer ${user.token}` } };
       const { data: verifyData } = await axios.post(
-        `http://localhost:5000/api/events/verify-ticket/${eventId}`,
+        `${API_BASE_URL}/api/events/verify-ticket/${eventId}`,
         { ticketId },
         verifyConfig
       );
@@ -746,7 +748,7 @@ const OrganizerDashboard = () => {
         const formData = new FormData();
         formData.append('image', blob, 'frame.png');
 
-        const { data: qrData } = await axios.post('http://localhost:5000/api/events/scan-qr', formData, config);
+        const { data: qrData } = await axios.post('${API_BASE_URL}/api/events/scan-qr', formData, config);
 
         if (qrData.success && qrData.payload && qrData.payload.ticketId) {
           // QR found! Stop scanning and verify
@@ -761,7 +763,7 @@ const OrganizerDashboard = () => {
 
           const verifyConfig = { headers: { Authorization: `Bearer ${user.token}` } };
           const { data: verifyData } = await axios.post(
-            `http://localhost:5000/api/events/verify-ticket/${payload.eventId}`,
+            `${API_BASE_URL}/api/events/verify-ticket/${payload.eventId}`,
             { ticketId: payload.ticketId },
             verifyConfig
           );
@@ -893,7 +895,7 @@ const OrganizerDashboard = () => {
         };
       }
 
-      await axios.post('http://localhost:5000/api/events', eventData, config);
+      await axios.post('${API_BASE_URL}/api/events', eventData, config);
 
       alert(status === 'Draft' ? "💾 Event Saved as Draft!" : "🎉 Event Published Successfully!");
 
@@ -920,7 +922,7 @@ const OrganizerDashboard = () => {
       setCustomFields([]);
 
       // Refresh events list
-      const eventRes = await axios.get('http://localhost:5000/api/events/my-events', config);
+      const eventRes = await axios.get('${API_BASE_URL}/api/events/my-events', config);
       setMyEvents(eventRes.data);
 
       // Switch to published events tab
@@ -937,12 +939,12 @@ const OrganizerDashboard = () => {
   const handleSaveProfile = async () => {
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.put('http://localhost:5000/api/users/profile', profileData, config);
+      await axios.put('${API_BASE_URL}/api/users/profile', profileData, config);
       alert('✅ Profile updated successfully!');
       setIsEditingProfile(false);
 
       // Refresh profile data
-      const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
+      const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
       setProfileData({
         organizerName: profileRes.data.organizerName || '',
         category: profileRes.data.category || '',
@@ -967,12 +969,12 @@ const OrganizerDashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${user.token}` } };
-      await axios.post('http://localhost:5000/api/auth/request-reset', { reason: profileData.resetReason }, config);
+      await axios.post('${API_BASE_URL}/api/auth/request-reset', { reason: profileData.resetReason }, config);
 
       alert("✅ Password reset request sent to Admin!");
 
       // Refresh to show pending status
-      const profileRes = await axios.get('http://localhost:5000/api/users/profile', config);
+      const profileRes = await axios.get('${API_BASE_URL}/api/users/profile', config);
       setProfileData(prev => ({
         ...prev,
         resetStatus: profileRes.data.resetRequest?.status,
