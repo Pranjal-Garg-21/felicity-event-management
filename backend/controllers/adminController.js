@@ -12,8 +12,7 @@ exports.createOrganizer = async (req, res) => {
       manualPassword, // Optional: Admin can provide specific password
       category,
       description,
-      orgContactNumber,
-      discordWebhook
+      orgContactNumber
     } = req.body;
 
     // 1. Auto-generate Email from Club Name
@@ -57,8 +56,7 @@ exports.createOrganizer = async (req, res) => {
       organizerName,
       category,
       description,
-      contactNumber: orgContactNumber,
-      discordWebhook
+      contactNumber: orgContactNumber
     });
 
     res.status(201).json({

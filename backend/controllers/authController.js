@@ -22,11 +22,11 @@ exports.loginUser = async (req, res) => {
 
     // 2. Check if user exists and password matches
     if (user && (await bcrypt.compare(password, user.password))) {
-      
+
       // 3. Role-based access control - validate expected role matches user's actual role
       if (expectedRole && user.role !== expectedRole) {
         console.log(`🚫 Role mismatch: User ${email} has role ${user.role}, tried to login as ${expectedRole}`);
-        
+
         let errorMessage = '';
         if (expectedRole === 'Admin') {
           errorMessage = "Access Denied: Only Admin accounts can login here. Please use the correct login portal.";
@@ -35,10 +35,10 @@ exports.loginUser = async (req, res) => {
         } else if (expectedRole === 'Participant') {
           errorMessage = "Access Denied: Only Participant accounts can login here. Please use the correct login portal.";
         }
-        
+
         return res.status(403).json({ message: errorMessage });
       }
-      
+
       const responseData = {
         _id: user._id,
         firstName: user.firstName,
@@ -56,7 +56,6 @@ exports.loginUser = async (req, res) => {
         responseData.description = user.description;
         responseData.contactNumber = user.contactNumber;
         responseData.contactEmail = user.contactEmail;
-        responseData.discordWebhook = user.discordWebhook;
       }
 
       console.log(`✅ Login successful: ${user.email} as ${user.role}`);
@@ -74,25 +73,25 @@ exports.loginUser = async (req, res) => {
 // @access  Private (Organizer)
 exports.requestPasswordReset = async (req, res) => {
   const { reason } = req.body;
-  
+
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found" });
-    
+
     if (user.role !== 'Organizer') {
       return res.status(403).json({ message: "Only organizers can request password reset" });
     }
-    
+
     // Check if already has pending request
     if (user.resetRequest.status === 'Pending') {
-      return res.status(400).json({ 
-        message: "You already have a pending password reset request. Please wait for admin approval." 
+      return res.status(400).json({
+        message: "You already have a pending password reset request. Please wait for admin approval."
       });
     }
-    
+
     if (!reason || reason.trim().length < 10) {
-      return res.status(400).json({ 
-        message: "Please provide a detailed reason (minimum 10 characters)" 
+      return res.status(400).json({
+        message: "Please provide a detailed reason (minimum 10 characters)"
       });
     }
 
@@ -102,12 +101,12 @@ exports.requestPasswordReset = async (req, res) => {
       requestedAt: new Date(),
       status: 'Pending'
     };
-    
+
     await user.save();
-    
+
     console.log(`🔐 Password reset requested by ${user.organizerName} (${user.email})`);
-    
-    res.json({ 
+
+    res.json({
       message: "Password reset request sent to Admin for approval. You will be notified once processed.",
       requestedAt: user.resetRequest.requestedAt
     });
@@ -147,7 +146,7 @@ exports.registerParticipant = async (req, res) => {
       contactNumber,
       // Force college name for internal students; use input for others
       collegeName: isIIITDomain ? 'IIIT Hyderabad' : collegeName,
-      participantType: participantType 
+      participantType: participantType
     });
 
     res.status(201).json({

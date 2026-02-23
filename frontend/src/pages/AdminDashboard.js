@@ -14,10 +14,8 @@ const AdminDashboard = () => {
     organizerName: '',
     // email is auto-generated
     manualPassword: '',
-    category: '',
     description: '',
-    contactNumber: '',
-    discordWebhook: ''
+    contactNumber: ''
   });
   const [useManualPassword, setUseManualPassword] = useState(false);
 
@@ -188,7 +186,6 @@ const AdminDashboard = () => {
         category: formData.category,
         description: formData.description,
         orgContactNumber: formData.contactNumber,
-        discordWebhook: formData.discordWebhook,
         manualPassword: useManualPassword ? formData.manualPassword : null
       };
 
@@ -206,8 +203,7 @@ const AdminDashboard = () => {
         manualPassword: '',
         category: '',
         description: '',
-        contactNumber: '',
-        discordWebhook: ''
+        contactNumber: ''
       });
       fetchOrganizers();
     } catch (err) {
@@ -329,16 +325,8 @@ const AdminDashboard = () => {
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             />
-            <input
-              type="url"
-              placeholder="Discord Webhook URL (optional)"
-              value={formData.discordWebhook}
-              onChange={(e) => setFormData({ ...formData, discordWebhook: e.target.value })}
-              style={{ ...inputStyle, gridColumn: 'span 2' }}
-              title="Get this from Discord: Server Settings → Integrations → Webhooks"
-            />
             <div style={{ gridColumn: 'span 2', fontSize: '0.85rem', color: '#666', marginTop: '-10px', marginBottom: '10px' }}>
-              💡 <strong>Discord Webhook:</strong> Events will auto-post to Discord when published. Get webhook URL from: Server Settings → Integrations → Webhooks
+              💡 <strong>Discord Webhook:</strong> Events are automatically posted to the campus Discord server using a fixed system URL. No manual setup required for individual clubs.
             </div>
             <button type="submit" style={{ ...submitButtonStyle, gridColumn: 'span 2' }}>
               ✅ Create Account

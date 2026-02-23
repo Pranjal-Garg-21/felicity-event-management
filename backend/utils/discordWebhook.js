@@ -13,10 +13,18 @@ const sendEventToDiscord = async (clubWebhookUrl, event, organizerName) => {
   // otherwise fallback to the club-specific URL provided.
   const webhookUrl = process.env.DISCORD_WEBHOOK_URL || clubWebhookUrl;
 
+  // Debug log to file
+  const fs = require('fs');
+  const logMsg = `[${new Date().toISOString()}] TRIGGERED: Event: ${event?.name}, Status: ${event?.status}, URL: ${webhookUrl ? 'SET' : 'MISSING'}\n`;
+  fs.appendFileSync('discord_debug.log', logMsg);
+
   if (!webhookUrl) {
-    console.log('ℹ️ Discord notifications disabled (No webhook URL)');
+    console.log('ℹ️ Discord notifications disabled (No webhook URL found in process.env.DISCORD_WEBHOOK_URL)');
     return { success: false, error: 'No Discord webhook URL configured' };
   }
+
+  console.log(`📡 Attempting to post event "${event.name}" to Discord...`);
+  console.log(`🔗 Webhook URL (truncated): ${webhookUrl.substring(0, 50)}...`);
 
   try {
     // Build a rich embed for Discord
@@ -100,10 +108,15 @@ const sendEventToDiscord = async (clubWebhookUrl, event, organizerName) => {
       timeout: 10000
     });
 
+    const successLog = `[${new Date().toISOString()}] SUCCESS: Event "${event.name}" posted to Discord\n`;
+    fs.appendFileSync('discord_debug.log', successLog);
     console.log(`✅ Discord notification sent via ${process.env.DISCORD_WEBHOOK_URL ? 'Global' : 'Club'} Webhook for: ${event.name}`);
     return { success: true };
   } catch (err) {
-    console.error('❌ Discord webhook error:', err.response?.data || err.message);
+    const errorMsg = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+    const errorLog = `[${new Date().toISOString()}] ERROR: Event "${event.name}" failed to post. Error: ${errorMsg}\n`;
+    fs.appendFileSync('discord_debug.log', errorLog);
+    console.error('❌ Discord webhook error:', errorMsg);
     return { success: false, error: err.message };
   }
 };

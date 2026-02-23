@@ -4,23 +4,23 @@ const userSchema = new mongoose.Schema({
   // --- Common Fields ---
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { 
-    type: String, 
-    enum: ['Participant', 'Organizer', 'Admin'], 
-    required: true 
+  role: {
+    type: String,
+    enum: ['Participant', 'Organizer', 'Admin'],
+    required: true
   },
   contactNumber: { type: String },
 
   // --- Participant Specific (Section 6.1) ---
   firstName: { type: String },
   lastName: { type: String },
-  contactNumber: { type: String },
+  participantContactNumber: { type: String }, // Renamed to avoid conflict with common contactNumber
   participantType: { type: String, enum: ['IIIT', 'Non-IIIT'] },
   collegeName: { type: String },
   interests: { type: [String], default: [] },
   followedClubs: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   hasCompletedOnboarding: { type: Boolean, default: false },
-  
+
   // Ticket History for registered events
   eventTickets: [{
     eventId: { type: mongoose.Schema.Types.ObjectId, ref: 'Event' },
@@ -45,10 +45,10 @@ const userSchema = new mongoose.Schema({
     teamName: { type: String },
     teamLeaderName: { type: String },
     teamLeaderEmail: { type: String },
-    status: { 
-      type: String, 
-      enum: ['Pending', 'Accepted', 'Declined'], 
-      default: 'Pending' 
+    status: {
+      type: String,
+      enum: ['Pending', 'Accepted', 'Declined'],
+      default: 'Pending'
     },
     invitedAt: { type: Date, default: Date.now },
     respondedAt: { type: Date }
@@ -71,16 +71,15 @@ const userSchema = new mongoose.Schema({
   category: { type: String },
   description: { type: String },
   contactEmail: { type: String }, // Separate from login email; editable contact email
-  discordWebhook: { type: String },
-  followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], 
-  
+  followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+
   // Active password reset request
   resetRequest: {
     reason: { type: String, default: null },
     requestedAt: { type: Date, default: null },
     status: { type: String, enum: ['None', 'Pending', 'Approved', 'Rejected'], default: 'None' }
   },
-  
+
   // Password reset history
   resetHistory: [{
     reason: { type: String },

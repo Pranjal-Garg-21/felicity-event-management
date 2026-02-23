@@ -802,28 +802,27 @@ router.put('/:id', protect, authorize('Organizer'), async (req, res) => {
       req.params.id,
       { $set: updates },
       { new: true, runValidators: true }
-    ).populate('organizer', 'organizerName email discordWebhook');
+    ).populate('organizer', 'organizerName email');
 
     // If status changed from Draft to Published, send Discord webhook
     if (currentStatus === 'Draft' && updates.status === 'Published') {
       const organizer = updatedEvent.organizer;
-      if (organizer.discordWebhook) {
-        try {
-          console.log('📢 Posting event to Discord...');
-          const discordResult = await sendEventToDiscord(
-            organizer.discordWebhook,
-            updatedEvent,
-            organizer.organizerName
-          );
-          if (discordResult.success) {
-            console.log('✅ Discord webhook sent successfully');
-          } else {
-            console.log('⚠️ Discord webhook failed:', discordResult.error);
-          }
-        } catch (discordErr) {
-          console.error('❌ Discord webhook error:', discordErr);
-          // Don't fail the update if Discord fails
+      try {
+        console.log('📢 Posting event to Discord...');
+        // Pass null as the first argument to use the global DISCORD_WEBHOOK_URL
+        const discordResult = await sendEventToDiscord(
+          null,
+          updatedEvent,
+          organizer?.organizerName || 'Organizer'
+        );
+        if (discordResult.success) {
+          console.log('✅ Discord webhook sent successfully');
+        } else {
+          console.log('⚠️ Discord webhook failed:', discordResult.error);
         }
+      } catch (discordErr) {
+        console.error('❌ Discord webhook error:', discordErr);
+        // Don't fail the update if Discord fails
       }
     }
 

@@ -22,16 +22,18 @@ exports.createEvent = async (req, res) => {
     const event = await Event.create(eventData);
 
     // If event is published immediately, auto-post to Discord
+    console.log(`[DEBUG] New Event Created: ${event.name}, Status: ${event.status}`);
     if (event.status === 'Published') {
       try {
+        console.log(`[DEBUG] Triggering Discord auto-post for ${event.name}`);
         const organizer = await User.findById(req.user.id);
-        if (organizer?.discordWebhook) {
-          const discordResult = await sendEventToDiscord(organizer.discordWebhook, event, organizer.organizerName);
-          console.log('Discord auto-post result:', discordResult);
-        }
+        const discordResult = await sendEventToDiscord(null, event, organizer?.organizerName || 'Organizer');
+        console.log('Discord auto-post result:', discordResult);
       } catch (discordErr) {
         console.error('Discord auto-post error (non-blocking):', discordErr);
       }
+    } else {
+      console.log(`[DEBUG] Discord post skipped (status is ${event.status})`);
     }
 
     res.status(201).json({ message: "Event created successfully", event });

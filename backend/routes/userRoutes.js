@@ -49,7 +49,7 @@ router.put('/organizer-profile', protect, async (req, res) => {
       return res.status(403).json({ message: 'Only organizers can update their profile' });
     }
 
-    const { organizerName, category, description, contactNumber, contactEmail, discordWebhook } = req.body;
+    const { organizerName, category, description, contactNumber, contactEmail } = req.body;
 
     // Editable fields — login email is NOT editable
     if (organizerName !== undefined) user.organizerName = organizerName;
@@ -57,7 +57,7 @@ router.put('/organizer-profile', protect, async (req, res) => {
     if (description !== undefined) user.description = description;
     if (contactNumber !== undefined) user.contactNumber = contactNumber;
     if (contactEmail !== undefined) user.contactEmail = contactEmail;
-    if (discordWebhook !== undefined) user.discordWebhook = discordWebhook;
+    if (contactEmail !== undefined) user.contactEmail = contactEmail;
 
     await user.save();
 
@@ -70,7 +70,7 @@ router.put('/organizer-profile', protect, async (req, res) => {
         email: user.email, // login email — read-only
         contactNumber: user.contactNumber,
         contactEmail: user.contactEmail,
-        discordWebhook: user.discordWebhook
+        contactEmail: user.contactEmail
       }
     });
   } catch (err) {

@@ -1,15 +1,17 @@
 const nodemailer = require('nodemailer');
 const QRCode = require('qrcode');
 
-// Create email transporter
-const createTransporter = () => {
-  // Check for Brevo credentials (Preferred for Deployed Version)
+// Email providers configuration in order of priority
+const getTransporterConfigs = () => {
+  const configs = [];
+
+  // 1. Brevo (Preferred)
   if (process.env.BREVO_SMTP_KEY && process.env.BREVO_SENDER_EMAIL) {
-    console.log('📧 Using Brevo SMTP for production-grade email delivery');
-    return nodemailer.createTransport({
+    configs.push({
+      name: 'Brevo SMTP',
       host: 'smtp-relay.brevo.com',
       port: 587,
-      secure: false, // TLS
+      secure: false,
       auth: {
         user: process.env.BREVO_SENDER_EMAIL,
         pass: process.env.BREVO_SMTP_KEY
@@ -17,11 +19,10 @@ const createTransporter = () => {
     });
   }
 
-  // Fallback to Gmail or generic SMTP if provided
+  // 2. Gmail / Generic SMTP (Fallback)
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    console.log('📧 Using SMTP (Gmail/Generic) with user:', process.env.EMAIL_USER);
-
-    return nodemailer.createTransport({
+    configs.push({
+      name: 'Gmail/Fallback SMTP',
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.EMAIL_PORT) || 587,
       secure: false,
@@ -33,10 +34,84 @@ const createTransporter = () => {
         rejectUnauthorized: false
       }
     });
-  } else {
-    console.log('⚠️ No email credentials found (BREVO_SMTP_KEY or EMAIL_USER), email sending disabled');
-    return null;
   }
+
+  return configs;
+};
+
+/**
+ * Robust email sender that tries multiple transport configurations
+ * if the primary one fails.
+ */
+const sendMailRobustly = async (mailOptions) => {
+  const configs = getTransporterConfigs();
+
+  if (configs.length === 0) {
+    console.error('❌ No email providers configured');
+    return { success: false, error: 'No email providers configured' };
+  }
+
+  let lastError = null;
+
+  for (const config of configs) {
+    try {
+      console.log(`📡 Attempting to send email via ${config.name}...`);
+
+      const transporter = nodemailer.createTransport({
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        auth: config.auth,
+        tls: config.tls
+      });
+
+      // Verify connection
+      await transporter.verify();
+
+      // Override 'from' if it's a specific provider that requires a fixed sender
+      if (config.name === 'Brevo SMTP') {
+        mailOptions.from = `"Felicity Events" <${process.env.BREVO_SENDER_EMAIL}>`;
+      } else if (config.name === 'Gmail/Fallback SMTP') {
+        mailOptions.from = `"Felicity Events" <${process.env.EMAIL_USER}>`;
+      }
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`✅ Email sent successfully via ${config.name}! Message ID: ${info.messageId}`);
+
+      return {
+        success: true,
+        provider: config.name,
+        messageId: info.messageId,
+        response: info.response
+      };
+    } catch (error) {
+      console.error(`⚠️ ${config.name} failed:`, error.message);
+      lastError = error;
+      // Continue to next provider
+    }
+  }
+
+  console.error('❌ All email providers failed to send email.');
+  return {
+    success: false,
+    error: lastError ? lastError.message : 'Unknown error'
+  };
+};
+
+// Legacy support for createTransporter if needed elsewhere
+const createTransporter = () => {
+  const configs = getTransporterConfigs();
+  if (configs.length === 0) return null;
+
+  // Return the first available config as a transporter
+  const config = configs[0];
+  return nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: config.auth,
+    tls: config.tls
+  });
 };
 
 // Generate ticket HTML template
@@ -246,16 +321,6 @@ const sendEventTicket = async (participantData, eventData) => {
   try {
     console.log('📨 Attempting to send email to:', participantData.email);
 
-    const transporter = createTransporter();
-
-    if (!transporter) {
-      console.log('⚠️ Email transporter not configured');
-      return {
-        success: false,
-        error: 'Email service not configured'
-      };
-    }
-
     // Generate unique ticket ID
     const ticketId = `TICKET-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
@@ -288,7 +353,7 @@ const sendEventTicket = async (participantData, eventData) => {
       qrDataUrl: null
     };
 
-    // Generate QR code as base64 data URL for all event types
+    // Generate QR code
     let qrBuffer = null;
     try {
       const qrPayload = JSON.stringify({
@@ -299,7 +364,6 @@ const sendEventTicket = async (participantData, eventData) => {
         type: eventData.type
       });
 
-      // Generate as data URL for embedding in HTML (works in all email clients)
       const qrDataUrl = await QRCode.toDataURL(qrPayload, {
         type: 'image/png',
         width: 300,
@@ -307,82 +371,48 @@ const sendEventTicket = async (participantData, eventData) => {
         color: { dark: '#667eea', light: '#ffffff' }
       });
       ticketData.qrDataUrl = qrDataUrl;
-
-      // Also generate buffer for file attachment
       qrBuffer = await QRCode.toBuffer(qrPayload, { type: 'png', width: 400 });
-      console.log('✅ QR code generated successfully, data URL length:', qrDataUrl.length);
+      console.log('✅ QR code generated successfully');
     } catch (qrErr) {
       console.error('❌ QR generation failed:', qrErr.message);
     }
 
-    // Prepare mail options with QR embedded in HTML
+    // Prepare mail options
     const mailOptions = {
-      from: `"Felicity Events" <${process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER}>`,
       to: participantData.email,
       subject: `🎟️ Event Ticket - ${eventData.name}`,
       html: generateTicketHTML(ticketData),
-      text: `
-        Event Registration Confirmed!
-        
-        Ticket ID: ${ticketId}
-        Participant: ${ticketData.participantName}
-        Email: ${participantData.email}
-        Event: ${eventData.name}
-        Date: ${eventDate}
-        ${eventTime ? `Time: ${eventTime}` : ''}
-        Venue: ${eventData.venue || 'TBA'}
-        Organizer: ${eventData.organizerName}
-        Registration Fee: ₹${eventData.registrationFee || 0}
-        
-        Important: Please carry this ticket to the event venue.
-        
-        This is an automated email. Please do not reply.
-      `
+      text: `Event Registration Confirmed! Ticket ID: ${ticketId}`
     };
 
-    // Attach QR as inline CID image (works in Gmail) + downloadable file
     if (qrBuffer) {
-      mailOptions.attachments = [
-        {
-          filename: `ticket-qr-${ticketId}.png`,
-          content: qrBuffer,
-          contentType: 'image/png',
-          cid: 'ticket_qr' // Referenced in HTML as <img src="cid:ticket_qr">
-        }
-      ];
+      mailOptions.attachments = [{
+        filename: `ticket-qr-${ticketId}.png`,
+        content: qrBuffer,
+        contentType: 'image/png',
+        cid: 'ticket_qr'
+      }];
     }
 
-    console.log('📤 Sending email...');
+    // Send robustly
+    const result = await sendMailRobustly(mailOptions);
 
-    // Verify transporter connection first
-    try {
-      await transporter.verify();
-      console.log('✅ SMTP connection verified');
-    } catch (verifyError) {
-      console.error('❌ SMTP verification failed:', verifyError.message);
+    if (result.success) {
+      return {
+        success: true,
+        ticketId: ticketId,
+        messageId: result.messageId,
+        provider: result.provider
+      };
+    } else {
       return {
         success: false,
-        error: `SMTP connection failed: ${verifyError.message}`
+        error: result.error
       };
     }
 
-    const info = await transporter.sendMail(mailOptions);
-
-    console.log('✅ Email sent successfully!');
-    console.log('📧 Message ID:', info.messageId);
-    console.log('� Response:', info.response);
-
-    return {
-      success: true,
-      ticketId: ticketId,
-      messageId: info.messageId
-    };
-
   } catch (error) {
-    console.error('❌ Error sending ticket email:', error);
-    console.error('Error details:', error.message);
-
-    // Don't throw error - registration should succeed even if email fails
+    console.error('❌ Error in sendEventTicket:', error);
     return {
       success: false,
       error: error.message
@@ -529,27 +559,7 @@ const generateTeamTicketHTML = (ticketData) => {
 // Send team event ticket emails to all team members
 const sendTeamEventTickets = async (teamData, eventData) => {
   try {
-    console.log('📨 Attempting to send team tickets for team:', teamData.teamName);
-
-    const transporter = createTransporter();
-
-    if (!transporter) {
-      console.log('⚠️ Email transporter not configured');
-      return { success: false, error: 'Email service not configured' };
-    }
-
-    // Verify transporter connection first
-    try {
-      await transporter.verify();
-      console.log('✅ SMTP connection verified for team emails');
-    } catch (verifyError) {
-      console.error('❌ SMTP verification failed:', verifyError.message);
-      return { success: false, error: `SMTP connection failed: ${verifyError.message}` };
-    }
-
-    // Generate a shared ticket ID for the team - REMOVED to use individual tickets
-    // const ticketId = `TEAM-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-    // console.log('🎟️ Generated Team Ticket ID:', ticketId);
+    console.log('📨 Sending team tickets for team:', teamData.teamName);
 
     // Format date and time
     const eventDate = new Date(eventData.startDate).toLocaleDateString('en-US', {
@@ -564,12 +574,10 @@ const sendTeamEventTickets = async (teamData, eventData) => {
     // Send email to each team member
     for (const member of teamData.members) {
       try {
-        // Use individual ticket ID from member data
         const memberTicketId = member.ticketId;
-
-        // Generate QR for this member
         let qrDataUrl = null;
         let qrBuffer = null;
+
         try {
           const qrPayload = JSON.stringify({
             ticketId: memberTicketId,
@@ -584,7 +592,6 @@ const sendTeamEventTickets = async (teamData, eventData) => {
             color: { dark: '#667eea', light: '#ffffff' }
           });
           qrBuffer = await QRCode.toBuffer(qrPayload, { type: 'png', width: 400 });
-          console.log(`✅ QR generated for team member: ${member.email} (TicketID: ${memberTicketId})`);
         } catch (qrErr) {
           console.error(`❌ QR generation failed for ${member.email}:`, qrErr.message);
         }
@@ -609,67 +616,38 @@ const sendTeamEventTickets = async (teamData, eventData) => {
         };
 
         const mailOptions = {
-          from: `"Felicity Events" <${process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER}>`,
           to: member.email,
           subject: `👥🎟️ Team Ticket - ${eventData.name} | Team: ${teamData.teamName}`,
           html: generateTeamTicketHTML(ticketData),
-          text: `
-            Team Registration Confirmed!
-            
-            Ticket ID: ${memberTicketId}
-            Team: ${teamData.teamName}
-            Member: ${member.name} (${member.email})
-            Event: ${eventData.name}
-            Date: ${eventDate}
-            ${eventTime ? `Time: ${eventTime}` : ''}
-            Venue: ${eventData.venue || 'TBA'}
-            Organizer: ${eventData.organizerName}
-            POC: ${teamData.pocName} (${teamData.pocEmail})
-            Total Fee: ₹${teamData.totalFee || 0}
-            
-            Team Members: ${teamData.members.map(m => `${m.name} (${m.email})`).join(', ')}
-            
-            Important: All team members must carry this ticket to the event venue.
-          `
+          text: `Team Ticket Confirmed! Ticket ID: ${memberTicketId}`
         };
 
-        // Attach QR as inline CID image (works in Gmail) + downloadable file
         if (qrBuffer) {
-          mailOptions.attachments = [
-            {
-              filename: `team-ticket-qr-${memberTicketId}.png`,
-              content: qrBuffer,
-              contentType: 'image/png',
-              cid: 'ticket_qr' // Referenced in HTML as <img src="cid:ticket_qr">
-            }
-          ];
+          mailOptions.attachments = [{
+            filename: `team-ticket-qr-${memberTicketId}.png`,
+            content: qrBuffer,
+            contentType: 'image/png',
+            cid: 'ticket_qr'
+          }];
         }
 
-        console.log(`📤 Sending team ticket to: ${member.name} <${member.email}>...`);
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`✅ Email sent to ${member.email}, Message ID: ${info.messageId}`);
-        results.push({ email: member.email, success: true, messageId: info.messageId });
+        const result = await sendMailRobustly(mailOptions);
+        results.push({ email: member.email, success: result.success, messageId: result.messageId, provider: result.provider });
       } catch (memberErr) {
-        console.error(`❌ Failed to send email to ${member.email}:`, memberErr.message);
+        console.error(`❌ Member error ${member.email}:`, memberErr.message);
         results.push({ email: member.email, success: false, error: memberErr.message });
       }
     }
 
-    const allSent = results.every(r => r.success);
     const sentCount = results.filter(r => r.success).length;
-    console.log(`📧 Team emails: ${sentCount}/${teamData.members.length} sent successfully`);
-
     return {
-      success: allSent,
-      partial: !allSent && sentCount > 0,
-
+      success: sentCount > 0,
       sentCount,
       totalMembers: teamData.members.length,
       results
     };
-
   } catch (error) {
-    console.error('❌ Error sending team ticket emails:', error);
+    console.error('❌ Error in sendTeamEventTickets:', error);
     return { success: false, error: error.message };
   }
 };
@@ -677,222 +655,92 @@ const sendTeamEventTickets = async (teamData, eventData) => {
 // Send team invitation email
 const sendTeamInvitation = async (invitationData) => {
   try {
-    const transporter = createTransporter();
-
-    if (!transporter) {
-      console.log('⚠️ Email transporter not available, skipping invitation email');
-      return { success: false, message: 'Email service not configured' };
-    }
-
     const {
       memberEmail,
-      memberName,
       teamName,
-      teamLeaderName,
-      teamLeaderEmail,
       eventName,
-      eventDate,
-      eventVenue,
-      inviteCode,
-      inviteLink,
-      registrationFee
+      inviteLink
     } = invitationData;
 
-    const emailHTML = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <style>
-          body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f4f4f4;
-            margin: 0;
-            padding: 0;
-          }
-          .container {
-            max-width: 600px;
-            margin: 20px auto;
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-          }
-          .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 30px;
-            text-align: center;
-            color: white;
-          }
-          .header h1 {
-            margin: 0;
-            font-size: 28px;
-          }
-          .content {
-            padding: 30px;
-          }
-          .invite-box {
-            background: #f8f9ff;
-            border-left: 4px solid #667eea;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 8px;
-          }
-          .invite-code {
-            background: #667eea;
-            color: white;
-            padding: 15px;
-            text-align: center;
-            font-size: 24px;
-            font-weight: bold;
-            letter-spacing: 3px;
-            border-radius: 8px;
-            margin: 20px 0;
-          }
-          .button {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 40px;
-            text-decoration: none;
-            border-radius: 30px;
-            font-weight: bold;
-            margin: 20px 0;
-          }
-          .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #eee;
-          }
-          .footer {
-            background: #f8f9ff;
-            padding: 20px;
-            text-align: center;
-            color: #666;
-            font-size: 14px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            <h1>👥 Team Invitation</h1>
-          </div>
-          
-          <div class="content">
-            <p style="font-size: 16px; color: #333;">
-              Hi ${memberName || 'there'},
-            </p>
-            
-            <p style="font-size: 16px; color: #333; line-height: 1.6;">
-              <strong>${teamLeaderName}</strong> (${teamLeaderEmail}) has invited you to join their team 
-              <strong>"${teamName}"</strong> for the event <strong>${eventName}</strong>.
-            </p>
-            
-            <div class="invite-box">
-              <h3 style="margin-top: 0; color: #667eea;">📋 Event Details</h3>
-              <div class="info-row">
-                <strong>Event:</strong>
-                <span>${eventName}</span>
-              </div>
-              <div class="info-row">
-                <strong>Team:</strong>
-                <span>${teamName}</span>
-              </div>
-              <div class="info-row">
-                <strong>Team Leader:</strong>
-                <span>${teamLeaderName}</span>
-              </div>
-              <div class="info-row">
-                <strong>Date:</strong>
-                <span>${new Date(eventDate).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })}</span>
-              </div>
-              ${eventVenue ? `
-              <div class="info-row">
-                <strong>Venue:</strong>
-                <span>${eventVenue}</span>
-              </div>
-              ` : ''}
-              <div class="info-row">
-                <strong>Registration Fee:</strong>
-                <span>₹${registrationFee || 0} per member</span>
-              </div>
-            </div>
-            
-            <p style="font-size: 16px; color: #333; margin-top: 20px;">
-              <strong>Your Invite Code:</strong>
-            </p>
-            <div class="invite-code">
-              ${inviteCode}
-            </div>
-            
-            <p style="font-size: 14px; color: #666; text-align: center;">
-              Use this code to accept your invitation
-            </p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${inviteLink}" class="button" style="color: white;">
-                ✅ Accept Invitation
-              </a>
-            </div>
-            
-            <p style="font-size: 14px; color: #666; line-height: 1.6;">
-              <strong>What happens next?</strong><br>
-              • Click the button above or use the invite code<br>
-              • You'll be added to the team<br>
-              • Once all members accept, tickets will be generated<br>
-              • You'll receive your event ticket via email
-            </p>
-            
-            <p style="font-size: 14px; color: #999; margin-top: 30px;">
-              If you don't want to join this team, you can safely ignore this email.
-            </p>
-          </div>
-          
-          <div class="footer">
-            <p>This is an automated email from the Event Management System.</p>
-            <p>Please do not reply to this email.</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
     const mailOptions = {
-      from: `"Event Management System" <${process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER || 'noreply@events.com'}>`,
       to: memberEmail,
       subject: `🎯 Team Invitation: ${teamName} - ${eventName}`,
-      html: emailHTML
+      html: generateInvitationEmailHTML(invitationData) // Helper function added below
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ Team invitation email sent to ${memberEmail}: ${info.messageId}`);
+    const result = await sendMailRobustly(mailOptions);
 
-    return {
-      success: true,
-      messageId: info.messageId,
-      previewUrl: nodemailer.getTestMessageUrl(info)
-    };
-
+    if (result.success) {
+      console.log(`✅ Team invitation email sent to ${memberEmail} via ${result.provider}`);
+      return { success: true, messageId: result.messageId, provider: result.provider };
+    } else {
+      return { success: false, error: result.error };
+    }
   } catch (error) {
-    console.error(`❌ Error sending team invitation to ${invitationData.memberEmail}:`, error);
+    console.error(`❌ Error in sendTeamInvitation:`, error);
     return { success: false, error: error.message };
   }
+};
+
+// Helper for invitation HTML (moved original logic here)
+const generateInvitationEmailHTML = (invitationData) => {
+  const {
+    memberEmail,
+    memberName,
+    teamName,
+    teamLeaderName,
+    teamLeaderEmail,
+    eventName,
+    eventDate,
+    eventVenue,
+    inviteCode,
+    inviteLink,
+    registrationFee
+  } = invitationData;
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: 'Arial', sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .content { padding: 30px; }
+        .invite-box { background: #f8f9ff; border-left: 4px solid #667eea; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .invite-code { background: #667eea; color: white; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 3px; border-radius: 8px; margin: 20px 0; }
+        .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 30px; font-weight: bold; margin: 20px 0; }
+        .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+        .footer { background: #f8f9ff; padding: 20px; text-align: center; color: #666; font-size: 14px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header"><h1>👥 Team Invitation</h1></div>
+        <div class="content">
+          <p>Hi ${memberName || 'there'},</p>
+          <p><strong>${teamLeaderName}</strong> has invited you to join <strong>"${teamName}"</strong> for <strong>${eventName}</strong>.</p>
+          <div class="invite-box">
+            <div class="info-row"><strong>Event:</strong><span>${eventName}</span></div>
+            <div class="info-row"><strong>Team:</strong><span>${teamName}</span></div>
+            <div class="info-row"><strong>Date:</strong><span>${new Date(eventDate).toLocaleDateString()}</span></div>
+            ${eventVenue ? `<div class="info-row"><strong>Venue:</strong><span>${eventVenue}</span></div>` : ''}
+          </div>
+          <div class="invite-code">${inviteCode}</div>
+          <div style="text-align: center;"><a href="${inviteLink}" class="button" style="color:white;">✅ Accept Invitation</a></div>
+        </div>
+        <div class="footer"><p>Campus Event Management System</p></div>
+      </div>
+    </body>
+    </html>
+  `;
 };
 
 // Send Event Cancellation Email
 const sendEventCancellationEmail = async (event, participantEmail, participantName) => {
   try {
-    const transporter = createTransporter();
-    if (!transporter) return { success: false, error: 'Transporter not configured' };
-
     const mailOptions = {
-      from: `"Felicity Events" <${process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER}>`,
       to: participantEmail,
       subject: `🚫 Event Cancelled: ${event.name}`,
       html: `
@@ -910,41 +758,27 @@ const sendEventCancellationEmail = async (event, participantEmail, participantNa
         </head>
         <body>
           <div class="container">
-            <div class="header">
-              <h1 style="margin:0;">🚫 Event Cancelled</h1>
-            </div>
+            <div class="header"><h1 style="margin:0;">🚫 Event Cancelled</h1></div>
             <div class="content">
-              <p>Dear <strong>${participantName || 'Participant'}</strong>,</p>
-              
-              <p>We regret to inform you that the event <strong>"${event.name}"</strong> scheduled for <strong>${new Date(event.startDate).toLocaleDateString()}</strong> has been cancelled by the organizer.</p>
-              
+              <p>Hi <strong>${participantName || 'Participant'}</strong>,</p>
+              <p>The event <strong>"${event.name}"</strong> has been cancelled.</p>
               <div class="details">
-                <h3 style="margin-top:0; color:#c62828;">Event Details:</h3>
-                <p style="margin:5px 0;">📅 <strong>Date:</strong> ${new Date(event.startDate).toLocaleDateString()}</p>
-                <p style="margin:5px 0;">📍 <strong>Venue:</strong> ${event.venue}</p>
-                <p style="margin:5px 0;">🎪 <strong>Organizer:</strong> ${event.organizer?.organizerName || 'Available on Dashboard'}</p>
+                <p>📅 <strong>Date:</strong> ${new Date(event.startDate).toLocaleDateString()}</p>
+                <p>📍 <strong>Venue:</strong> ${event.venue}</p>
               </div>
-
-              <p>Since this was a free event, no refund is required. We apologize for any inconvenience caused and hope to see you at future events.</p>
-              
-              <p>If you have any questions, please contact the organizer directly.</p>
+              <p>We apologize for any inconvenience caused.</p>
             </div>
-            <div class="footer">
-              <p>This is an automated message. Please do not reply.</p>
-              <p>© ${new Date().getFullYear()} Campus Event Management System</p>
-            </div>
+            <div class="footer"><p>Campus Event Management System</p></div>
           </div>
         </body>
         </html>
       `
     };
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`📧 Cancellation email sent to ${participantEmail} (Message ID: ${info.messageId})`);
-    return { success: true, messageId: info.messageId };
-
+    const result = await sendMailRobustly(mailOptions);
+    return { success: result.success, messageId: result.messageId, provider: result.provider };
   } catch (error) {
-    console.error(`❌ Error sending cancellation email to ${participantEmail}:`, error);
+    console.error(`❌ Error in sendEventCancellationEmail:`, error);
     return { success: false, error: error.message };
   }
 };
